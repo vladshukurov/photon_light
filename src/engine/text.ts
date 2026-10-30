@@ -1,36 +1,48 @@
 /*
-  Маска надписи для шейдера.
+  Надпись для шейдера: резкая маска и три размытые копии.
 
-  Надпись растеризуется в размер кадра: белые буквы на прозрачном, VK Sans
-  Display Condensed, по центру. У текстуры есть mip-уровни — шейдер читает
-  размытые уровни как карту высот и строит по ним рельеф букв, так что
-  отдельный проход размытия не нужен.
+  Так же, как в гайде «Работа со светом»: верхний слой букв резкий, под ним —
+  та же надпись, размытая Progressive Blur'ом. Копии размыты настоящим
+  гауссовым blur() канваса (тем же, что даёт Layer Blur в Figma) с тремя
+  радиусами; шейдер плавно переходит между резкой маской и сильным размытием
+  вдоль оси к источнику света.
 
-  Перерисовывается только при смене текста, размера или разрешения.
+  Радиусы заданы в долях кегля, поэтому свечение одинаково на холсте, в
+  миниатюрах и в экспорте 4K. Перерисовка — только при смене текста, размера
+  или разрешения.
 */
 
 export const TEXT_FONT_FAMILY = 'VK Sans Display Condensed';
 const font = (px: number) => `600 ${px}px "${TEXT_FONT_FAMILY}"`;
 
-/** Что шейдеру нужно знать о надписи, кроме маски. */
+/** Радиус сильного размытия в долях кегля (в гайде — 20 px на кегле ~100 px). */
+const BLUR_OF_FONT = 0.2;
+const LEVELS = [1 / 3, 2 / 3, 1];
+
+/** Что шейдеру нужно знать о надписи, кроме текстур. */
 export interface TextLayout {
   /** Половины ширины и высоты блока надписи в долях короткой стороны кадра. */
   half: [number, number];
-  /** Кегль в пикселях текстуры — от него считается радиус свечения. */
-  px: number;
 }
 
 export class TextTexture {
+  /** Резкая маска и три копии с растущим размытием. */
   readonly tex: WebGLTexture;
+  readonly blurred: WebGLTexture[];
+  layout: TextLayout = { half: [0, 0] };
   private key = '';
-  layout: TextLayout = { half: [0, 0], px: 1 };
-  private readonly canvas = document.createElement('canvas');
+  private readonly sharp = document.createElement('canvas');
+  private readonly soft = document.createElement('canvas');
 
   constructor(private readonly gl: WebGL2RenderingContext) {
-    const tex = gl.createTexture();
-    if (!tex) throw new Error('Недостаточно памяти видеокарты.');
-    this.tex = tex;
-    this.upload(1, 1);
+    const make = () => {
+      const t = gl.createTexture();
+      if (!t) throw new Error('Недостаточно памяти видеокарты.');
+      return t;
+    };
+    this.tex = make();
+    this.blurred = LEVELS.map(make);
+    for (const t of [this.tex, ...this.blurred]) this.upload(t);
   }
 
   /** Возвращает true, если в кадре есть надпись. */
@@ -42,50 +54,75 @@ export class TextTexture {
     if (key === this.key) return true;
     this.key = key;
 
-    const c = this.canvas;
+    const c = this.sharp;
     c.width = width;
     c.height = height;
     const ctx = c.getContext('2d');
     if (!ctx) return false;
     ctx.clearRect(0, 0, width, height);
-    const px = Math.max(8, Math.round(size * Math.min(width, height)));
+    const short = Math.min(width, height);
+    let px = Math.max(8, Math.round(size * short));
+    ctx.font = font(px);
+    const lines = content.split('\n');
+    // Надпись не шире 86% кадра: длинная строка ужимается целиком.
+    const widest = Math.max(...lines.map((l) => ctx.measureText(l).width), 1);
+    const fit = Math.min(1, (width * 0.86) / widest);
+    px = Math.max(8, Math.round(px * fit));
+    const lead = px * 0.92;
     ctx.font = font(px);
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const lines = content.split('\n');
-    const lead = px * 0.92;
-    // Надпись не шире 86% кадра: длинная строка ужимается целиком.
-    const widest = Math.max(...lines.map((l) => ctx.measureText(l).width), 1);
-    const fit = Math.min(1, (width * 0.86) / widest);
-    if (fit < 1) ctx.font = font(Math.round(px * fit));
-    const top = height / 2 - ((lines.length - 1) * lead * Math.min(1, fit)) / 2;
-    lines.forEach((l, i) => ctx.fillText(l, width / 2, top + i * lead * Math.min(1, fit)));
-    const short = Math.min(width, height);
+    const top = height / 2 - ((lines.length - 1) * lead) / 2;
+    lines.forEach((l, i) => ctx.fillText(l, width / 2, top + i * lead));
     this.layout = {
-      half: [(widest * fit) / 2 / short, (lines.length * lead * fit) / 2 / short],
-      px: px * fit,
+      half: [(widest * fit) / 2 / short, (lines.length * lead) / 2 / short],
     };
-    this.upload(width, height, c);
+    this.upload(this.tex, c);
+
+    const radius = px * BLUR_OF_FONT;
+    LEVELS.forEach((k, i) => this.upload(this.blurred[i], this.blur(c, radius * k)));
     return true;
   }
 
-  private upload(width: number, height: number, source?: HTMLCanvasElement) {
+  /** Гауссово размытие маски. Без canvas filter — через уменьшение и плавное увеличение. */
+  private blur(src: HTMLCanvasElement, radius: number) {
+    const out = this.soft;
+    out.width = src.width;
+    out.height = src.height;
+    const ctx = out.getContext('2d')!;
+    ctx.clearRect(0, 0, out.width, out.height);
+    // Safari до 18 не умеет canvas filter — там размытие делается масштабированием.
+    const hasFilter = typeof (ctx as { filter?: unknown }).filter === 'string';
+    if (hasFilter) {
+      ctx.filter = `blur(${radius.toFixed(1)}px)`;
+      ctx.drawImage(src, 0, 0);
+      ctx.filter = 'none';
+    } else {
+      const k = Math.max(1, radius / 2);
+      const w = Math.max(1, Math.round(src.width / k)),
+        h = Math.max(1, Math.round(src.height / k));
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(src, 0, 0, w, h);
+      ctx.drawImage(out, 0, 0, w, h, 0, 0, out.width, out.height);
+    }
+    return out;
+  }
+
+  private upload(tex: WebGLTexture, source?: HTMLCanvasElement) {
     const gl = this.gl;
-    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     if (source) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    else
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
   dispose() {
-    this.gl.deleteTexture(this.tex);
+    for (const t of [this.tex, ...this.blurred]) this.gl.deleteTexture(t);
   }
 }

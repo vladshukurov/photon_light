@@ -200,8 +200,10 @@ export class Renderer {
       .int('uTextOn', hasText ? 1 : 0)
       .texture('uText', this.text.tex)
       .vec2('uTextTexel', 1 / w, 1 / h)
+      .texture('uTextBlur1', this.text.blurred[0])
+      .texture('uTextBlur2', this.text.blurred[1])
+      .texture('uTextBlur3', this.text.blurred[2])
       .vec2('uTextHalf', ...this.text.layout.half)
-      .float('uTextPx', this.text.layout.px)
       .float('uTextGlow', p.text.glow);
     gl.disable(gl.BLEND);
     this.draw();

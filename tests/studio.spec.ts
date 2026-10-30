@@ -110,7 +110,7 @@ test('drags the light on the canvas', async ({ page }) => {
   await expect(page.locator('.canvas-state')).toHaveCount(0);
 
   await page.getByRole('textbox', { name: 'Текст надписи' }).fill('VK CONF 2026');
-  await expect(page.getByRole('slider', { name: 'Свечение' })).toBeVisible();
+  await expect(page.getByRole('slider', { name: 'Размер' })).toBeVisible();
   await page.getByRole('button', { name: 'Убрать' }).click();
   await expect(page.getByRole('textbox', { name: 'Текст надписи' })).toHaveValue('');
 });

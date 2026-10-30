@@ -41,8 +41,6 @@ export interface Look {
   text: string;
   /** Высота строки в долях короткой стороны кадра. */
   textSize: number;
-  /** Собственное свечение букв поверх освещения. */
-  textGlow: number;
   motion: Motion;
 }
 
@@ -80,7 +78,6 @@ export const RANGES = {
   haze: { min: 0, max: 1, def: 0.5 },
   grain: { min: 0, max: 1, def: 0.4 },
   textSize: { min: 0.05, max: 0.4, def: 0.14 },
-  textGlow: { min: 0, max: 1, def: 0.75 },
 } satisfies Record<string, Range>;
 export type NumericKey = keyof typeof RANGES;
 
@@ -102,7 +99,6 @@ export const DEFAULT_LOOK: Look = {
   grain: 0.4,
   text: '',
   textSize: 0.14,
-  textGlow: 0.75,
   motion: { enabled: false, toAngle: 45, duration: 8 },
 };
 

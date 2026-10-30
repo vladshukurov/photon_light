@@ -194,7 +194,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       noiseScale: 1.7,
     },
     rays: { amount: look.rays, count: look.rayCount },
-    text: { content: look.text.trim(), size: look.textSize, glow: dark ? look.textGlow : 0 },
+    text: { content: look.text.trim(), size: look.textSize, glow: dark ? 1 : 0 },
     time: opts.time ?? 0,
     bloom: {
       intensity: profile.bloom,

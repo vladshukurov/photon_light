@@ -212,12 +212,7 @@ export function Inspector({
             value={look.text}
             onChange={(e) => onChange({ text: e.target.value }, 'text')}
           />
-          {look.text.trim() && (
-            <div className="slider-stack">
-              {slider('textSize', 'Размер')}
-              {slider('textGlow', 'Свечение')}
-            </div>
-          )}
+          {look.text.trim() && <div className="slider-stack">{slider('textSize', 'Размер')}</div>}
         </Card>
       </aside>
     </>
