@@ -9,3 +9,7 @@ test-results/
 
 # локальные настройки Claude Code
 .claude/
+
+# Vercel
+.vercel/
+.vercel

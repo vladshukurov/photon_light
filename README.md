@@ -46,6 +46,8 @@ node tools/shoot.mjs '{"cell":[480,270],"cols":2,"refs":["/docs/references/light
 
 ## Развёртывание
 
+Продакшен: https://photon-light.vercel.app — Vercel, настройки в `vercel.json` (сборка Vite, заголовки безопасности и кеширование ассетов). Новая версия: `npx vercel deploy --prod`.
+
 ```sh
 npm run build   # содержимое dist/ — на любой статический HTTPS-хостинг
 docker build -t photon-studio . && docker run --rm -p 8080:8080 photon-studio
