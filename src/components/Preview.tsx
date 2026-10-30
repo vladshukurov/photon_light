@@ -253,7 +253,6 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
           <canvas ref={canvasRef} role="img" aria-label="Превью световой сцены" />
           <div
             className="canvas-hit"
-            title="Потяните, чтобы переставить свет"
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId);
               setDragging(true);

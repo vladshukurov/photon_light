@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   ArrowDown,
   ArrowDownLeft,
@@ -6,7 +5,6 @@ import {
   ArrowUp,
   ArrowUpLeft,
   ArrowUpRight,
-  ChevronDown,
   Moon,
   RotateCcw,
   Sun,
@@ -46,7 +44,6 @@ const TUNING = [
   'rayCount',
   'reflex',
   'grain',
-  'distance',
 ] as const satisfies readonly NumericKey[];
 
 type Patch = Partial<Look>;
@@ -58,7 +55,6 @@ export function Inspector({
   look: Look;
   onChange: (patch: Patch, group?: string) => void;
 }) {
-  const [more, setMore] = useState(false);
   const slider = (key: NumericKey, label: string, format = percent, disabled = false) => (
     <Slider
       label={label}
@@ -176,17 +172,6 @@ export function Inspector({
           {slider('rays', 'Лучи', (v) => (v === 0 ? 'Нет' : percent(v)))}
           {look.rays > 0 && slider('rayCount', 'Сколько лучей', (v) => String(Math.round(v)))}
         </div>
-        <button className="disclosure" aria-expanded={more} onClick={() => setMore(!more)}>
-          Ещё
-          <ChevronDown size={14} />
-        </button>
-        {more && (
-          <div className="slider-stack">
-            {slider('reflex', 'Рефлекс бренда')}
-            {slider('distance', 'Отступ источника')}
-            {slider('grain', 'Зерно')}
-          </div>
-        )}
       </Card>
 
       <Card

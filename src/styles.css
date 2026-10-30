@@ -770,12 +770,15 @@ button:disabled {
   left: calc(var(--t) * 100%);
   width: 2px;
   margin-left: -1px;
-  background: rgba(255, 255, 255, 0.35);
+  background: #fff;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 0.15s;
 }
 .slider-pill:hover .slider-thumb,
-.slider-pill:active .slider-thumb {
-  background: #fff;
+.slider-pill:active .slider-thumb,
+.slider-pill:focus-visible .slider-thumb {
+  opacity: 0.8;
 }
 .slider-label,
 .slider-value {
