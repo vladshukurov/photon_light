@@ -154,7 +154,8 @@ vec3 reflexLight(vec3 X, out vec3 L) {
   vec3 toL = uReflexPos - X;
   float d2 = dot(toL, toL);
   L = toL * inversesqrt(max(d2, 1e-6));
-  return uReflexColor / (d2 + 0.08);
+  // Быстрый спад: рефлекс — цветная кромка у края кадра, а не заливка.
+  return uReflexColor * exp(-2.2 * d2) / (d2 + 0.04);
 }
 
 float hg(float cosA, float g) {

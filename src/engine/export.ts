@@ -217,6 +217,7 @@ async function recordVideo(
   validateSize(width, height);
   if (width * height > 1920 * 1080)
     throw new Error('Для видео выберите размер не больше 1920 × 1080 или 1080 × 1920.');
+  if (signal.aborted) throw new DOMException('Запись отменена', 'AbortError');
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -260,10 +261,19 @@ async function recordVideo(
         failed: Error | null = null;
       let started: number | null = null;
       const initializingAt = performance.now();
+      // Отмена отвечает сразу: дожидаться, пока кодек допишет файл, незачем —
+      // результат всё равно выбрасывается, а на медленном GPU это секунды.
       const abort = () => {
         aborted = true;
+        cancelAnimationFrame(raf);
+        clearTimeout(stopTimer);
         if (recorder.state !== 'inactive') recorder.stop();
+        reject(new DOMException('Запись отменена', 'AbortError'));
       };
+      if (signal.aborted) {
+        abort();
+        return;
+      }
       signal.addEventListener('abort', abort, { once: true });
       recorder.ondataavailable = (e) => {
         if (e.data.size) chunks.push(e.data);

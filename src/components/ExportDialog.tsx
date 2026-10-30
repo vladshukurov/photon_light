@@ -263,19 +263,22 @@ export function ExportDialog({
       )}
 
       <div className="modal-actions">
+        <button className="button" disabled={busy} onClick={onClose}>
+          Закрыть
+        </button>
         {busy && kind === 'video' ? (
-          <button className="button" onClick={() => abort.current?.abort()}>
+          // Остановка стоит на месте основной кнопки, а не «Закрыть»: если запись
+          // закончится в момент клика, он не закроет окно с результатом.
+          <button className="button stop" onClick={() => abort.current?.abort()}>
+            <LoaderCircle size={15} className="spin" />
             Остановить запись
           </button>
         ) : (
-          <button className="button" disabled={busy} onClick={onClose}>
-            Закрыть
+          <button className="button primary" disabled={busy || !valid} onClick={run}>
+            {busy ? <LoaderCircle size={15} className="spin" /> : <ArrowDownToLine size={15} />}
+            {busy ? 'Готовим файл…' : kind === 'video' ? 'Записать видео' : 'Скачать'}
           </button>
         )}
-        <button className="button primary" disabled={busy || !valid} onClick={run}>
-          {busy ? <LoaderCircle size={15} className="spin" /> : <ArrowDownToLine size={15} />}
-          {busy ? 'Готовим файл…' : kind === 'video' ? 'Записать видео' : 'Скачать'}
-        </button>
       </div>
     </Modal>
   );

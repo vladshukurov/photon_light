@@ -22,7 +22,8 @@ import {
   type NumericKey,
 } from '../domain/look';
 import { DirectionPad } from './DirectionPad';
-import { Section, Segmented, Slider, Toggle } from './controls';
+import { LiveThumb } from './LiveThumb';
+import { Card, Segmented, Slider, Toggle } from './controls';
 import { percent, signed } from './format';
 
 /** Стрелка показывает, куда идёт свет: источник сверху слева светит вниз вправо. */
@@ -34,6 +35,19 @@ const DIRECTION_ICONS = {
   bottom: ArrowUp,
   'bottom-right': ArrowUpLeft,
 } as const;
+
+/** Всё, что двигает ползунками: «Сбросить» возвращает именно это, не трогая свет и бренд. */
+const TUNING = [
+  'brightness',
+  'spread',
+  'softness',
+  'haze',
+  'rays',
+  'rayCount',
+  'reflex',
+  'grain',
+  'distance',
+] as const satisfies readonly NumericKey[];
 
 type Patch = Partial<Look>;
 
@@ -59,17 +73,17 @@ export function Inspector({
     />
   );
   const current = directionOf(look.angle);
-  const tuned = (['brightness', 'spread', 'softness', 'haze'] as const).some(
-    (k) => look[k] !== DEFAULT_LOOK[k],
-  );
+  const tuned = TUNING.some((k) => look[k] !== DEFAULT_LOOK[k]);
 
   return (
     <aside className="inspector" aria-label="Настройки света">
-      <Section
+      <Card
         title="Источник"
         action={
-          <span className="section-meta">
-            {current ? current.label : `${Math.round(wrapAngle(look.angle))}°`}
+          <span className="card-meta">
+            {current && look.distance === 1
+              ? current.label
+              : `${Math.round(wrapAngle(look.angle))}°`}
           </span>
         }
       >
@@ -79,13 +93,13 @@ export function Inspector({
             onChange({ angle: wrapAngle(angle), distance }, group)
           }
         />
-        <div className="direction-row" role="group" aria-label="Направление света">
+        <div className="chip-row" role="group" aria-label="Направление света">
           {DIRECTIONS.map((d) => {
             const Icon = DIRECTION_ICONS[d.id];
             return (
               <button
                 key={d.id}
-                className="icon-chip"
+                className="chip"
                 aria-label={d.label}
                 title={d.label}
                 aria-pressed={current?.id === d.id && look.distance === 1}
@@ -96,65 +110,48 @@ export function Inspector({
             );
           })}
         </div>
-      </Section>
+      </Card>
 
-      <Section title="Бренд">
+      <Card title="Окружение">
         <div className="brand-grid" role="group" aria-label="Бренд">
           {BRANDS.map((b) => (
             <button
               key={b.id}
-              className="brand-chip"
+              className="brand-card"
               aria-pressed={look.brand === b.id}
+              aria-label={b.label}
               onClick={() => onChange({ brand: b.id })}
             >
-              <i
-                className="brand-swatch"
-                style={{
-                  background: `radial-gradient(120% 90% at 30% 20%, ${b.accent}55, transparent 60%), linear-gradient(180deg, ${b.swatch.join(', ')})`,
-                }}
+              <LiveThumb
+                look={{ ...look, brand: b.id }}
+                width={232}
+                height={144}
+                className="brand-thumb"
               />
               <span>{b.label}</span>
             </button>
           ))}
         </div>
-      </Section>
+        <Segmented
+          label="Комната"
+          value={look.room}
+          options={[
+            { id: 'dark', label: 'Тёмная', icon: <Moon size={14} /> },
+            { id: 'light', label: 'Светлая', icon: <Sun size={14} /> },
+          ]}
+          onChange={(room) => onChange({ room })}
+        />
+      </Card>
 
-      <Section title="Комната и характер">
-        <div className="stack">
-          <Segmented
-            label="Комната"
-            value={look.room}
-            options={[
-              { id: 'dark', label: 'Тёмная', icon: <Moon size={14} /> },
-              { id: 'light', label: 'Светлая', icon: <Sun size={14} /> },
-            ]}
-            onChange={(room) => onChange({ room })}
-          />
-          <Segmented
-            label="Характер"
-            value={look.character}
-            options={[
-              { id: 'guide', label: 'Как в гайде' },
-              { id: 'vivid', label: 'Выразительный' },
-            ]}
-            onChange={(character) => onChange({ character })}
-          />
-        </div>
-      </Section>
-
-      <Section
+      <Card
         title="Свет"
         action={
           <button
             className="ghost-button"
             disabled={!tuned}
+            title="Вернуть все ползунки к исходным"
             onClick={() =>
-              onChange({
-                brightness: DEFAULT_LOOK.brightness,
-                spread: DEFAULT_LOOK.spread,
-                softness: DEFAULT_LOOK.softness,
-                haze: DEFAULT_LOOK.haze,
-              })
+              onChange(Object.fromEntries(TUNING.map((k) => [k, DEFAULT_LOOK[k]])) as Patch)
             }
           >
             <RotateCcw size={12} />
@@ -162,23 +159,38 @@ export function Inspector({
           </button>
         }
       >
-        <div className="stack">
+        <Segmented
+          label="Характер"
+          value={look.character}
+          options={[
+            { id: 'guide', label: 'Как в гайде' },
+            { id: 'vivid', label: 'Выразительный' },
+          ]}
+          onChange={(character) => onChange({ character })}
+        />
+        <div className="slider-stack">
           {slider('brightness', 'Яркость', signed)}
           {slider('spread', 'Ширина луча')}
           {slider('softness', 'Мягкость края')}
           {slider('haze', 'Дымка')}
+          {slider('rays', 'Лучи', (v) => (v === 0 ? 'Нет' : percent(v)))}
+          {look.rays > 0 && slider('rayCount', 'Сколько лучей', (v) => String(Math.round(v)))}
         </div>
-      </Section>
+        <button className="disclosure" aria-expanded={more} onClick={() => setMore(!more)}>
+          Ещё
+          <ChevronDown size={14} />
+        </button>
+        {more && (
+          <div className="slider-stack">
+            {slider('reflex', 'Рефлекс бренда')}
+            {slider('distance', 'Отступ источника')}
+            {slider('grain', 'Зерно')}
+          </div>
+        )}
+      </Card>
 
-      <Section title="Лучи">
-        <div className="stack">
-          {slider('rays', 'Выраженность', (v) => (v === 0 ? 'Выкл' : percent(v)))}
-          {slider('rayCount', 'Количество', (v) => String(Math.round(v)), look.rays === 0)}
-        </div>
-      </Section>
-
-      <Section
-        title="Движение"
+      <Card
+        title="Проход света"
         action={
           <Toggle
             label="Проход света"
@@ -188,19 +200,17 @@ export function Inspector({
         }
       >
         {look.motion.enabled ? (
-          <div className="stack">
-            <p className="hint">Свет проходит по кадру от текущего места к выбранному.</p>
-            <div className="direction-row" role="group" aria-label="Куда идёт свет">
+          <>
+            <div className="chip-row" role="group" aria-label="Куда идёт свет">
               {DIRECTIONS.map((d) => {
                 const Icon = DIRECTION_ICONS[d.id];
-                const same = Math.abs(wrapAngle(d.angle - look.angle)) < 0.5;
                 return (
                   <button
                     key={d.id}
-                    className="icon-chip"
+                    className="chip"
                     aria-label={`К: ${d.label}`}
-                    title={`К: ${d.label}`}
-                    disabled={same}
+                    title={`Свет приходит: ${d.label}`}
+                    disabled={Math.abs(wrapAngle(d.angle - look.angle)) < 0.5}
                     aria-pressed={Math.abs(wrapAngle(d.angle - look.motion.toAngle)) < 0.5}
                     onClick={() => onChange({ motion: { ...look.motion, toAngle: d.angle } })}
                   >
@@ -210,7 +220,7 @@ export function Inspector({
               })}
             </div>
             <Slider
-              label="Длительность прохода"
+              label="Длительность"
               value={look.motion.duration}
               min={3}
               max={20}
@@ -221,28 +231,11 @@ export function Inspector({
                 onChange({ motion: { ...look.motion, duration } }, 'duration')
               }
             />
-          </div>
+          </>
         ) : (
-          <p className="hint">
-            Включите, чтобы свет медленно прошёл по кадру — для видео и моушна. Дымка и лучи в видео
-            живут всегда.
-          </p>
+          <p className="hint">Свет медленно пройдёт по кадру — для видео и моушна.</p>
         )}
-      </Section>
-
-      <section className="section">
-        <button className="disclosure" aria-expanded={more} onClick={() => setMore(!more)}>
-          <span>Тонкая настройка</span>
-          <ChevronDown size={14} />
-        </button>
-        {more && (
-          <div className="stack">
-            {slider('reflex', 'Брендовый рефлекс')}
-            {slider('distance', 'Отступ источника', (v) => `${Math.round(v * 100)}%`)}
-            {slider('grain', 'Зерно')}
-          </div>
-        )}
-      </section>
+      </Card>
     </aside>
   );
 }

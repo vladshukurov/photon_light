@@ -1,6 +1,7 @@
 import { useRef, type PointerEvent } from 'react';
 import { DIRECTIONS, directionOf, type Look } from '../domain/look';
 import { edgePoint, frameHalf } from '../domain/scene';
+import { LiveThumb } from './LiveThumb';
 
 /*
   Миниатюра кадра с источником вокруг него. Шесть точек — направления гайда,
@@ -65,6 +66,18 @@ export function DirectionPad({
 
   return (
     <div className="direction-pad">
+      <LiveThumb
+        look={look}
+        width={Math.round(fw * 2)}
+        height={Math.round(fh * 2)}
+        className="pad-thumb"
+        style={{
+          left: `${((cx - fw / 2) / W) * 100}%`,
+          top: `${((cy - fh / 2) / H) * 100}%`,
+          width: `${(fw / W) * 100}%`,
+          height: `${(fh / H) * 100}%`,
+        }}
+      />
       <svg
         ref={svg}
         viewBox={`0 0 ${W} ${H}`}
@@ -94,38 +107,7 @@ export function DirectionPad({
           }
         }}
       >
-        <defs>
-          <radialGradient
-            id="pad-light"
-            cx={sx}
-            cy={sy}
-            r={fw * 0.9}
-            gradientUnits="userSpaceOnUse"
-          >
-            <stop offset="0" stopColor="#fff" stopOpacity="0.55" />
-            <stop offset="0.45" stopColor="#fff" stopOpacity="0.1" />
-            <stop offset="1" stopColor="#fff" stopOpacity="0" />
-          </radialGradient>
-          <clipPath id="pad-frame">
-            <rect x={cx - fw / 2} y={cy - fh / 2} width={fw} height={fh} rx="3" />
-          </clipPath>
-        </defs>
-        <rect
-          className={`pad-frame ${look.room}`}
-          x={cx - fw / 2}
-          y={cy - fh / 2}
-          width={fw}
-          height={fh}
-          rx="3"
-        />
-        <rect
-          clipPath="url(#pad-frame)"
-          x={cx - fw / 2}
-          y={cy - fh / 2}
-          width={fw}
-          height={fh}
-          fill="url(#pad-light)"
-        />
+        <rect className="pad-frame" x={cx - fw / 2} y={cy - fh / 2} width={fw} height={fh} rx="4" />
         {path && <path className="pad-path" d={path} />}
         {DIRECTIONS.map((d) => {
           const [x, y] = toXY(d.angle, 1);

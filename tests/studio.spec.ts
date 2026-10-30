@@ -62,7 +62,14 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await page.getByRole('button', { name: 'Повторить', exact: true }).click();
   await page.getByRole('button', { name: 'Светлая', exact: true }).click();
   await page.getByRole('button', { name: 'Выразительный', exact: true }).click();
-  await page.getByRole('slider', { name: 'Выраженность' }).fill('0.6');
+  const rays = page.getByRole('slider', { name: 'Лучи' });
+  await rays.focus();
+  for (let i = 0; i < 6; i++) await page.keyboard.press('Shift+ArrowRight');
+  await expect(rays).toHaveAttribute('aria-valuenow', '0.6');
+  await rays.dblclick();
+  await expect(rays).toHaveAttribute('aria-valuenow', '0');
+  await page.getByRole('button', { name: 'Отменить', exact: true }).click();
+  await expect(rays).toHaveAttribute('aria-valuenow', '0.6');
 
   await page.waitForTimeout(700);
   await page.reload();
@@ -78,7 +85,9 @@ test('edits light, brand and room with undo, redo and session restore', async ({
     'aria-valuetext',
     'Снизу справа',
   );
-  await expect(page.getByRole('slider', { name: 'Выраженность' })).toHaveValue('0.6');
+  await expect(page.getByRole('slider', { name: 'Лучи' })).toHaveAttribute('aria-valuenow', '0.6');
+  await page.getByRole('button', { name: 'Сбросить' }).click();
+  await expect(page.getByRole('slider', { name: 'Лучи' })).toHaveAttribute('aria-valuenow', '0');
   expect(errors).toEqual([]);
 });
 

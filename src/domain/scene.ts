@@ -47,11 +47,11 @@ interface CharacterProfile {
 const CHARACTER: Record<Look['character'], { dark: CharacterProfile; light: CharacterProfile }> = {
   guide: {
     dark: { ev: 0.35, cone: 0, haze: 1, bloom: 0.14, threshold: 0.22, saturation: 1.5 },
-    light: { ev: 1.3, cone: 0, haze: 0.5, bloom: 0.25, threshold: 0, saturation: 1 },
+    light: { ev: 0.9, cone: -2, haze: 0.8, bloom: 0.2, threshold: 0, saturation: 1 },
   },
   vivid: {
     dark: { ev: 1.2, cone: 3, haze: 1.5, bloom: 0.4, threshold: 0.18, saturation: 1.7 },
-    light: { ev: 2, cone: 3, haze: 0.9, bloom: 0.35, threshold: 0, saturation: 1.05 },
+    light: { ev: 1.6, cone: 2, haze: 1.3, bloom: 0.3, threshold: 0, saturation: 1.05 },
   },
 };
 
@@ -140,10 +140,13 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const gain = Math.pow(2, (dark ? 3.55 : 3.1) + profile.ev + look.brightness * 1.6);
 
   // Рефлекс: свет, отразившийся от брендового предмета сбоку от кадра.
-  const ra = (angle + 115) * DEG;
-  const reflexPos: Vec3 = [Math.sin(ra) * 1.6, Math.cos(ra) * 1.4, 0.6];
+  // Стоит у края кадра сбоку от лампы и почти касается стены: даёт цветную
+  // кромку у края, а не заливку всего кадра.
+  const [rx, ry] = edgePoint(angle + 110, aspect);
+  const rl = Math.hypot(rx, ry) || 1;
+  const reflexPos: Vec3 = [rx + (rx / rl) * 0.3, ry + (ry / rl) * 0.3, 0.22];
   const baseGain = Math.pow(2, dark ? 3.55 : 3.1);
-  const reflexColor = scale(linear(brand.accent), look.reflex * baseGain * (dark ? 0.035 : 0.012));
+  const reflexColor = scale(linear(brand.accent), look.reflex * baseGain * (dark ? 0.3 : 0.08));
 
   const saturation = profile.saturation;
   const wall = dark ? brand.wall : LIGHT_ROOM.wall;
@@ -153,7 +156,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   // Цвет среды: свет, прошедший сквозь неё, уходит в её цвет. Белая — не красит.
   const medium = linear(brand.medium);
   const mMax = Math.max(...medium, 1e-4);
-  const tint = dark ? 0.9 : 0.35;
+  const tint = dark ? 0.9 : 1.2;
   const ext = medium.map((v) => 1 + tint * (1 - v / mMax)) as Vec3;
 
   const floorLuma = luma(albedo.map((a, i) => a * ambient[i]));
@@ -189,7 +192,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     exposure: 1,
     saturation,
     grain: look.grain * (dark ? 0.016 : 0.009),
-    vignette: dark ? 0.28 : 0.15,
+    vignette: dark ? 0.28 : 0.45,
     seed: 17,
   };
 }

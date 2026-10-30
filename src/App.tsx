@@ -15,16 +15,12 @@ export default function App() {
   const { look, set, undo, redo, canUndo, canRedo, saved } = useLook();
   const preview = useRef<PreviewHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const ambientRef = useRef<HTMLCanvasElement>(null);
-  const [ambient, setAmbient] = useState<HTMLCanvasElement | null>(null);
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [dialog, setDialog] = useState<'export' | 'help' | null>(null);
   const [toast, setToast] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const dragDepth = useRef(0);
-
-  useEffect(() => setAmbient(ambientRef.current), []);
 
   const change = useCallback(
     (patch: Partial<Look>, group?: string) => set({ ...look, ...patch }, group),
@@ -94,7 +90,7 @@ export default function App() {
 
   return (
     <div
-      className={`app room-${look.room}`}
+      className="app"
       onDragEnter={(e) => {
         if (!e.dataTransfer.types.includes('Files')) return;
         e.preventDefault();
@@ -117,12 +113,9 @@ export default function App() {
         void importFile(e.dataTransfer.files[0]);
       }}
     >
-      <canvas ref={ambientRef} className="ambient" width={48} height={32} aria-hidden="true" />
-
       <header className="topbar">
-        <div className="brand">
+        <div className="glass pill brand">
           <span className="wordmark">Фотон</span>
-          <span className="divider" aria-hidden="true" />
           <input
             className="name-input"
             aria-label="Название сцены"
@@ -134,53 +127,58 @@ export default function App() {
               if (!e.target.value.trim()) change({ name: 'Без названия' });
             }}
           />
+          <span
+            className={`save-dot${saved ? '' : ' off'}`}
+            title={saved ? 'Сохранено в браузере' : 'Автосохранение недоступно — сохраните JSON'}
+          />
         </div>
-        <div className="toolbar">
+        <div className="topbar-end">
+          <div className="glass pill toolbar">
+            <button
+              className="icon-button"
+              aria-label="Отменить"
+              title={`Отменить · ${MOD}Z`}
+              disabled={!canUndo}
+              onClick={undo}
+            >
+              <Undo2 size={16} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Повторить"
+              title={`Повторить · ⇧${MOD}Z`}
+              disabled={!canRedo}
+              onClick={redo}
+            >
+              <Redo2 size={16} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Открыть JSON"
+              title={`Открыть JSON · ${MOD}O`}
+              onClick={() => fileInput.current?.click()}
+            >
+              <FolderOpen size={16} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Сохранить JSON"
+              title={`Сохранить JSON · ${MOD}S`}
+              onClick={save}
+            >
+              <Download size={16} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Справка"
+              title="Правила света и клавиши"
+              onClick={() => setDialog('help')}
+            >
+              <CircleHelp size={16} />
+            </button>
+          </div>
           <button
-            className="icon-button"
-            aria-label="Отменить"
-            title={`Отменить · ${MOD}Z`}
-            disabled={!canUndo}
-            onClick={undo}
-          >
-            <Undo2 size={16} />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Повторить"
-            title={`Повторить · ⇧${MOD}Z`}
-            disabled={!canRedo}
-            onClick={redo}
-          >
-            <Redo2 size={16} />
-          </button>
-          <span className="divider" aria-hidden="true" />
-          <button
-            className="icon-button"
-            aria-label="Открыть JSON"
-            title={`Открыть JSON · ${MOD}O`}
-            onClick={() => fileInput.current?.click()}
-          >
-            <FolderOpen size={16} />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Сохранить JSON"
-            title={`Сохранить JSON · ${MOD}S`}
-            onClick={save}
-          >
-            <Download size={16} />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Справка"
-            title="Правила света и клавиши"
-            onClick={() => setDialog('help')}
-          >
-            <CircleHelp size={16} />
-          </button>
-          <button
-            className="button primary"
+            className="button primary export-button"
             disabled={!ready}
             title={`Экспорт · ${MOD}E`}
             onClick={() => setDialog('export')}
@@ -192,25 +190,6 @@ export default function App() {
 
       <main className="workspace">
         <section className="stage" aria-label="Холст">
-          <div className="stage-bar">
-            <div className="formats" role="group" aria-label="Формат">
-              {FORMATS.map((f) => (
-                <button
-                  key={f.label}
-                  aria-pressed={format === f}
-                  onClick={() => change({ width: f.width, height: f.height })}
-                >
-                  <i style={{ aspectRatio: `${f.width} / ${f.height}` }} />
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            <span className="stage-meta">
-              {look.width} × {look.height}
-              <span className={`save-dot${saved ? '' : ' off'}`} />
-              {saved ? 'Сохранено' : 'Автосохранение недоступно'}
-            </span>
-          </div>
           <Preview
             ref={preview}
             look={look}
@@ -218,7 +197,21 @@ export default function App() {
             onPlayingChange={setPlaying}
             onSourceChange={(angle, distance, group) => change({ angle, distance }, group)}
             onReady={setReady}
-            ambient={ambient}
+            dock={
+              <div className="formats" role="group" aria-label="Формат">
+                {FORMATS.map((f) => (
+                  <button
+                    key={f.label}
+                    aria-pressed={format === f}
+                    title={`${f.width} × ${f.height}`}
+                    onClick={() => change({ width: f.width, height: f.height })}
+                  >
+                    <i style={{ aspectRatio: `${f.width} / ${f.height}` }} />
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            }
           />
         </section>
         <Inspector look={look} onChange={change} />

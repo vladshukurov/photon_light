@@ -5,6 +5,8 @@ import {
   useRef,
   useState,
   type PointerEvent,
+  type CSSProperties,
+  type ReactNode,
 } from 'react';
 import { AlertCircle, Pause, Play, RefreshCw } from 'lucide-react';
 import { Renderer } from '../engine/renderer';
@@ -25,8 +27,8 @@ interface Props {
   onPlayingChange: (playing: boolean) => void;
   onSourceChange: (angle: number, distance: number, group: string) => void;
   onReady: (ready: boolean) => void;
-  /** Маленький холст, куда копируется кадр — из него собирается отсвет интерфейса. */
-  ambient?: HTMLCanvasElement | null;
+  /** Что показать в доке слева от плеера (форматы). */
+  dock?: ReactNode;
 }
 
 const MAX_W = 1600,
@@ -34,14 +36,14 @@ const MAX_W = 1600,
   SETTLE_FRAMES = 8;
 
 export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
-  { look, playing, onPlayingChange, onSourceChange, onReady, ambient },
+  { look, playing, onPlayingChange, onSourceChange, onReady, dock },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null),
     areaRef = useRef<HTMLDivElement>(null),
     barRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
-  const live = useRef({ look, playing, ambient, time: 0 });
+  const live = useRef({ look, playing, time: 0 });
   const invalidateRef = useRef<() => void>(() => {});
   const readyRef = useRef(onReady);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -59,9 +61,8 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
   useEffect(() => {
     live.current.look = look;
     live.current.playing = playing;
-    live.current.ambient = ambient;
     invalidateRef.current();
-  }, [look, playing, ambient]);
+  }, [look, playing]);
 
   useEffect(() => {
     const area = areaRef.current;
@@ -103,12 +104,6 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
       readyRef.current(false);
     };
 
-    const copyAmbient = () => {
-      const target = live.current.ambient;
-      const ctx = target?.getContext('2d');
-      if (ctx && target) ctx.drawImage(canvas, 0, 0, target.width, target.height);
-    };
-
     const draw = (now: number) => {
       raf = 0;
       if (disposed || lost || document.hidden || !renderer || canvas.width < 2) return;
@@ -128,7 +123,6 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
         });
         frames++;
         if (frames === 1) setLoading(false);
-        if (frames === SETTLE_FRAMES || (p && frames % 6 === 0)) copyAmbient();
         if (barRef.current) {
           const pr = l.motion.enabled ? loopProgress(t, l.motion.duration) : 0;
           barRef.current.style.setProperty('--progress', String(pr));
@@ -250,7 +244,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
   };
 
   return (
-    <div className="preview">
+    <div className="preview" style={{ '--aspect': aspect } as CSSProperties}>
       <div ref={areaRef} className="preview-area">
         <div
           className={`canvas-wrap${dragging ? ' dragging' : ''}`}
@@ -303,7 +297,8 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
           )}
         </div>
       </div>
-      <div className="transport" ref={barRef}>
+      <div className="dock" ref={barRef}>
+        {dock}
         <button
           className="play-button"
           aria-label={playing ? 'Пауза' : 'Воспроизвести'}
@@ -336,7 +331,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
             <i />
           </div>
         ) : (
-          <span className="transport-label">{playing ? 'Дымка течёт' : 'Живой свет'}</span>
+          <span className="dock-label">{playing ? 'Дымка течёт' : 'Живой свет'}</span>
         )}
       </div>
     </div>
