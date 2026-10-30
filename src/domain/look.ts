@@ -12,7 +12,6 @@ import { isBrand, type BrandId } from './brands';
 */
 
 export type Room = 'dark' | 'light';
-export type Character = 'guide' | 'vivid';
 
 export interface Motion {
   enabled: boolean;
@@ -26,18 +25,17 @@ export interface Look {
   name: string;
   brand: BrandId;
   room: Room;
-  character: Character;
   angle: number;
   distance: number;
   width: number;
   height: number;
+  expression: number;
   brightness: number;
   spread: number;
   softness: number;
   rays: number;
   rayCount: number;
   haze: number;
-  reflex: number;
   grain: number;
   motion: Motion;
 }
@@ -67,13 +65,13 @@ interface Range {
 export const RANGES = {
   angle: { min: -180, max: 180, def: -45 },
   distance: { min: 0.2, max: 2, def: 1 },
+  expression: { min: 0, max: 1, def: 0 },
   brightness: { min: -1, max: 1, def: 0 },
   spread: { min: 0, max: 1, def: 0.5 },
   softness: { min: 0, max: 1, def: 0.6 },
   rays: { min: 0, max: 1, def: 0 },
   rayCount: { min: 3, max: 16, def: 7 },
   haze: { min: 0, max: 1, def: 0.5 },
-  reflex: { min: 0, max: 1, def: 0.35 },
   grain: { min: 0, max: 1, def: 0.4 },
 } satisfies Record<string, Range>;
 export type NumericKey = keyof typeof RANGES;
@@ -82,18 +80,17 @@ export const DEFAULT_LOOK: Look = {
   name: 'Новый свет',
   brand: 'vk',
   room: 'dark',
-  character: 'guide',
   angle: -45,
   distance: 1,
   width: 1920,
   height: 1080,
+  expression: 0,
   brightness: 0,
   spread: 0.5,
   softness: 0.6,
   rays: 0,
   rayCount: 7,
   haze: 0.5,
-  reflex: 0.35,
   grain: 0.4,
   motion: { enabled: false, toAngle: 45, duration: 8 },
 };
@@ -129,7 +126,8 @@ export function normalizeLook(raw: unknown): Look {
   if (typeof src.name === 'string' && src.name.trim()) look.name = src.name.trim().slice(0, 80);
   if (isBrand(src.brand)) look.brand = src.brand;
   if (src.room === 'dark' || src.room === 'light') look.room = src.room;
-  if (src.character === 'guide' || src.character === 'vivid') look.character = src.character;
+  // Файлы с переключателем «характер» (до ползунка): vivid — это выразительность 100%.
+  if (src.character === 'vivid') look.expression = 1;
   for (const key of Object.keys(RANGES) as NumericKey[]) {
     const v = src[key];
     if (typeof v === 'number' && Number.isFinite(v)) {

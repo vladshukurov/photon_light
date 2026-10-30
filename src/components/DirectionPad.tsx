@@ -25,8 +25,11 @@ export function DirectionPad({
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const aspect = look.width / look.height;
-  const fw = aspect >= 1 ? BOX - PAD * 2 : (BOX - PAD * 2) * aspect;
-  const fh = aspect >= 1 ? (BOX - PAD * 2) / aspect : BOX - PAD * 2;
+  // Кадр вписан в 140 × 92: вертикальные форматы не раздувают панель по высоте.
+  const fitW = BOX - PAD * 2,
+    fitH = 92;
+  const fw = aspect >= fitW / fitH ? fitW : fitH * aspect;
+  const fh = fw / aspect;
   const W = BOX,
     H = fh + PAD * 2;
   const cx = W / 2,

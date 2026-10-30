@@ -14,7 +14,6 @@ export type Vec3 = [number, number, number];
 
 export interface Scene {
   light: { pos: Vec3; dir: Vec3; coneHalf: number; softness: number; gain: number; radius: number };
-  reflex: { pos: Vec3; color: Vec3 };
   albedo: Vec3;
   ambient: Vec3;
   roughness: number;
@@ -29,7 +28,7 @@ export interface Scene {
   seed: number;
 }
 
-interface CharacterProfile {
+interface Profile {
   ev: number;
   cone: number;
   haze: number;
@@ -39,28 +38,41 @@ interface CharacterProfile {
 }
 
 /*
-  Два характера одной и той же установки. «Гайд» откалиброван по шести кадрам
-  «Свечение. Направления» (Figma 12661:11136): тёмный кадр, мягкое пятно у края.
-  «Выразительный» — тот же свет, но ярче и плотнее: крупнее пятно, читаемый
-  объём, сильнее ореол. Геометрия от характера не зависит.
+  Выразительность — одна ось между двумя калибровками одной и той же установки.
+  0 — «как в гайде»: по шести кадрам «Свечение. Направления» (Figma 12661:11136),
+  тёмный кадр и мягкое пятно у края. 1 — тот же свет ярче и плотнее: крупнее
+  пятно, читаемый объём, сильнее ореол. Между ними — линейная смесь; геометрия
+  от выразительности не зависит.
 */
-const CHARACTER: Record<Look['character'], { dark: CharacterProfile; light: CharacterProfile }> = {
-  guide: {
-    dark: { ev: 0.35, cone: 0, haze: 1, bloom: 0.14, threshold: 0.22, saturation: 1.5 },
-    light: { ev: 0.9, cone: -2, haze: 0.8, bloom: 0.2, threshold: 0, saturation: 1 },
-  },
-  vivid: {
-    dark: { ev: 1.2, cone: 3, haze: 1.5, bloom: 0.4, threshold: 0.18, saturation: 1.7 },
-    light: { ev: 1.6, cone: 2, haze: 1.3, bloom: 0.3, threshold: 0, saturation: 1.05 },
-  },
+const PROFILES: Record<Look['room'], [guide: Profile, vivid: Profile]> = {
+  dark: [
+    { ev: 0.35, cone: 0, haze: 1, bloom: 0.14, threshold: 0.22, saturation: 1.5 },
+    { ev: 1.2, cone: 3, haze: 1.5, bloom: 0.4, threshold: 0.18, saturation: 1.7 },
+  ],
+  light: [
+    { ev: 0.9, cone: -2, haze: 0.8, bloom: 0.2, threshold: 0, saturation: 1 },
+    { ev: 1.6, cone: 2, haze: 1.3, bloom: 0.3, threshold: 0, saturation: 1.05 },
+  ],
 };
+
+function profileAt(room: Look['room'], t: number): Profile {
+  const [a, b] = PROFILES[room];
+  const mix = (k: keyof Profile) => a[k] + (b[k] - a[k]) * t;
+  return {
+    ev: mix('ev'),
+    cone: mix('cone'),
+    haze: mix('haze'),
+    bloom: mix('bloom'),
+    threshold: mix('threshold'),
+    saturation: mix('saturation'),
+  };
+}
 
 const DEG = Math.PI / 180;
 const normalize = (v: Vec3): Vec3 => {
   const l = Math.hypot(...v) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];
 };
-const scale = (v: Vec3, k: number): Vec3 => [v[0] * k, v[1] * k, v[2] * k];
 
 export function frameHalf(aspect: number): [number, number] {
   return aspect >= 1 ? [0.5 * aspect, 0.5] : [0.5, 0.5 / aspect];
@@ -125,7 +137,7 @@ export interface SceneOptions {
 export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}): Scene {
   const brand = brandById(look.brand);
   const dark = look.room === 'dark';
-  const profile = CHARACTER[look.character][look.room];
+  const profile = profileAt(look.room, look.expression);
   const angle = angleAt(look, opts.progress ?? 0);
 
   const [sx, sy] = sourceXY(angle, look.distance, aspect);
@@ -138,15 +150,6 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
 
   const coneDeg = 9 + look.spread * 18 + profile.cone;
   const gain = Math.pow(2, (dark ? 3.55 : 3.1) + profile.ev + look.brightness * 1.6);
-
-  // Рефлекс: свет, отразившийся от брендового предмета сбоку от кадра.
-  // Стоит у края кадра сбоку от лампы и почти касается стены: даёт цветную
-  // кромку у края, а не заливку всего кадра.
-  const [rx, ry] = edgePoint(angle + 110, aspect);
-  const rl = Math.hypot(rx, ry) || 1;
-  const reflexPos: Vec3 = [rx + (rx / rl) * 0.3, ry + (ry / rl) * 0.3, 0.22];
-  const baseGain = Math.pow(2, dark ? 3.55 : 3.1);
-  const reflexColor = scale(linear(brand.accent), look.reflex * baseGain * (dark ? 0.3 : 0.08));
 
   const saturation = profile.saturation;
   const wall = dark ? brand.wall : LIGHT_ROOM.wall;
@@ -170,7 +173,6 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       gain,
       radius: 0.12,
     },
-    reflex: { pos: reflexPos, color: reflexColor },
     albedo,
     ambient,
     roughness: 0.75,

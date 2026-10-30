@@ -10,7 +10,7 @@ async function ready(page: Page) {
 }
 
 async function customSize(dialog: Locator, width: number, height: number) {
-  await dialog.getByRole('button', { name: /^Свой/ }).click();
+  await dialog.getByRole('button', { name: 'Свой', exact: true }).click();
   await dialog.getByRole('spinbutton', { name: 'Ширина' }).fill(String(width));
   await dialog.getByRole('spinbutton', { name: 'Высота' }).fill(String(height));
 }
@@ -61,7 +61,10 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   );
   await page.getByRole('button', { name: 'Повторить', exact: true }).click();
   await page.getByRole('button', { name: 'Светлая', exact: true }).click();
-  await page.getByRole('button', { name: 'Выразительный', exact: true }).click();
+  const expression = page.getByRole('slider', { name: 'Выразительность' });
+  await expression.focus();
+  await page.keyboard.press('End');
+  await expect(expression).toHaveAttribute('aria-valuenow', '1');
   const rays = page.getByRole('slider', { name: 'Лучи' });
   await rays.focus();
   for (let i = 0; i < 6; i++) await page.keyboard.press('Shift+ArrowRight');
@@ -91,7 +94,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   expect(errors).toEqual([]);
 });
 
-test('drags the light on the canvas and plays the light pass', async ({ page }) => {
+test('drags the light on the canvas and plays live light', async ({ page }) => {
   await ready(page);
   const canvas = page.locator('.canvas-hit');
   const box = (await canvas.boundingBox())!;
@@ -104,8 +107,6 @@ test('drags the light on the canvas and plays the light pass', async ({ page }) 
   );
   expect(angle).toBeGreaterThan(20);
 
-  await page.getByRole('switch', { name: 'Проход света' }).click();
-  await expect(page.getByRole('slider', { name: 'Положение прохода' })).toBeVisible();
   await page.getByRole('button', { name: 'Воспроизвести' }).click();
   await expect(page.getByRole('button', { name: 'Пауза' })).toBeVisible();
   await page.waitForTimeout(600);
@@ -120,7 +121,7 @@ test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ 
   await customSize(dialog, 320, 180);
 
   let downloadPromise = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'Скачать', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Скачать PNG', exact: true }).click();
   const png = await downloadPromise;
   const pngBytes = await readFile((await png.path())!);
   expect(png.suggestedFilename()).toMatch(/320×180\.png$/);
@@ -130,14 +131,14 @@ test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ 
 
   await dialog.getByRole('button', { name: 'JPG', exact: true }).click();
   downloadPromise = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'Скачать', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Скачать JPG', exact: true }).click();
   const jpgBytes = await readFile((await (await downloadPromise).path())!);
   expect([jpgBytes[0], jpgBytes[1]]).toEqual([0xff, 0xd8]);
 
-  await dialog.getByRole('button', { name: /^Слои/ }).click();
+  await dialog.getByRole('button', { name: 'Слои', exact: true }).click();
   await customSize(dialog, 320, 180);
   downloadPromise = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'Скачать', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Скачать слои', exact: true }).click();
   const { unzipSync } = await import('fflate');
   const files = unzipSync(new Uint8Array(await readFile((await (await downloadPromise).path())!)));
   expect(Object.keys(files)).toEqual([
@@ -146,7 +147,7 @@ test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ 
     '03-volume.png',
     'README.txt',
   ]);
-  await dialog.getByRole('button', { name: 'Закрыть', exact: true }).last().click();
+  await dialog.getByRole('button', { name: 'Закрыть', exact: true }).click();
 
   await page.getByRole('textbox', { name: 'Название сцены' }).fill('Первый свет');
   downloadPromise = page.waitForEvent('download');
@@ -189,12 +190,11 @@ test('imports a prototype preset with 58 keys', async ({ page }) => {
 
 test('records playable video at the requested size and supports cancellation', async ({ page }) => {
   await ready(page);
-  await page.getByRole('switch', { name: 'Проход света' }).click();
   await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: /^Видео/ }).click();
+  await dialog.getByRole('button', { name: 'Видео', exact: true }).click();
   await customSize(dialog, 320, 180);
-  await dialog.getByLabel('Длительность').selectOption('3');
+  await dialog.getByRole('button', { name: '3 с', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
   await dialog.getByRole('button', { name: 'Записать видео' }).click();
   const video = await downloadPromise;

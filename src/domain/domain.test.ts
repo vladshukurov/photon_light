@@ -23,7 +23,7 @@ describe('Look boundary', () => {
       name: 'Обложка',
       brand: 'music',
       room: 'light',
-      character: 'vivid',
+      expression: 0.7,
       angle: 137,
       distance: 1.4,
       width: 1080,
@@ -116,12 +116,12 @@ describe('one light rig', () => {
     }
   });
 
-  it('keeps the photon white: brand changes wall, medium and reflex only', () => {
+  it('keeps the photon white: brand changes wall and medium only', () => {
     const vk = buildScene(look({ brand: 'vk' }), 1);
     const music = buildScene(look({ brand: 'music' }), 1);
     expect(music.light).toEqual(vk.light);
     expect(music.albedo).not.toEqual(vk.albedo);
-    expect(music.reflex.color).not.toEqual(vk.reflex.color);
+    expect(music.haze.ext).not.toEqual(vk.haze.ext);
   });
 
   it('switching room keeps the light placement', () => {
@@ -129,6 +129,22 @@ describe('one light rig', () => {
     const light = buildScene(look({ room: 'light', angle: 120 }), 16 / 9);
     expect(light.light.pos).toEqual(dark.light.pos);
     expect(light.light.dir).toEqual(dark.light.dir);
+  });
+});
+
+describe('expression', () => {
+  it('blends between the guide and vivid calibrations', () => {
+    const guide = buildScene(look({ expression: 0 }), 1);
+    const half = buildScene(look({ expression: 0.5 }), 1);
+    const vivid = buildScene(look({ expression: 1 }), 1);
+    expect(half.light.gain).toBeGreaterThan(guide.light.gain);
+    expect(half.light.gain).toBeLessThan(vivid.light.gain);
+    expect(vivid.light.pos).toEqual(guide.light.pos);
+  });
+
+  it('opens files saved with the old character switch', () => {
+    expect(normalizeLook({ character: 'vivid' }).expression).toBe(1);
+    expect(normalizeLook({ character: 'guide' }).expression).toBe(0);
   });
 });
 
@@ -174,8 +190,7 @@ describe('tone', () => {
   });
 
   it('every brand defines all environment colours', () => {
-    for (const b of BRANDS)
-      for (const c of [b.wall, b.medium, b.accent]) expect(c).toMatch(/^#[0-9A-F]{6}$/);
+    for (const b of BRANDS) for (const c of [b.wall, b.medium]) expect(c).toMatch(/^#[0-9A-F]{6}$/);
   });
 });
 

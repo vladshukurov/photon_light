@@ -8,12 +8,11 @@ precision highp float;
   складывается из трёх слагаемых, которые же уходят в послойную выгрузку:
 
     base  — неосвещённая стена (общий свет светлой комнаты; в тёмной — ноль);
-    light — прямой свет лампы и брендового рефлекса на стене;
+    light — прямой свет лампы на стене;
     air   — свет, рассеянный дымкой в камеру.
 
-  Цвет бренда не красит лампу. Он входит через стену (альбедо), через среду
-  (ослабление по каналам — свет по пути уходит в её цвет) и через рефлекс —
-  слабый цветной свет от брендового предмета сбоку от кадра.
+  Цвет бренда не красит лампу. Он входит через стену (альбедо) и через среду
+  (ослабление по каналам — свет по пути уходит в её цвет).
 
   Выход — линейный HDR. Экспозиция, bloom, ACES и гамма — в composite.frag.
 */
@@ -41,8 +40,6 @@ uniform float uLightRadius;
 uniform float uConeHalf;
 uniform float uConeSoft;      // 0 — резкий край, 1 — широкая полутень
 
-uniform vec3  uReflexPos;
-uniform vec3  uReflexColor;   // линейный, уже с усилением
 
 uniform vec3  uAlbedo;
 uniform vec3  uAmbient;
@@ -150,14 +147,6 @@ vec3 spotLight(vec3 X, out vec3 L, out float dist) {
   return vec3(uLightGain * atten * profile * rays);
 }
 
-vec3 reflexLight(vec3 X, out vec3 L) {
-  vec3 toL = uReflexPos - X;
-  float d2 = dot(toL, toL);
-  L = toL * inversesqrt(max(d2, 1e-6));
-  // Быстрый спад: рефлекс — цветная кромка у края кадра, а не заливка.
-  return uReflexColor * exp(-2.2 * d2) / (d2 + 0.04);
-}
-
 float hg(float cosA, float g) {
   float g2 = g * g;
   return (1.0 - g2) / (4.0 * PI * pow(max(1.0 + g2 - 2.0 * g * cosA, 1e-4), 1.5));
@@ -210,10 +199,6 @@ void main() {
   float spec = ggx(max(H.z, 0.0), a2) * 0.04 * 0.25;
   vec3 lit = (uAlbedo / PI + spec) * NdotL * E;
 
-  vec3 Lr;
-  vec3 Er = reflexLight(P, Lr);
-  lit += uAlbedo / PI * max(Lr.z, 0.0) * Er;
-
   vec3 ambient = uAlbedo * uAmbient;
 
   // --- дымка -------------------------------------------------------------
@@ -238,8 +223,6 @@ void main() {
         float ds;
         vec3 Es = spotLight(X, Ls, ds) * beamTransmittance(ds);
         vec3 inscatter = Es * phase(Ls.z);
-        vec3 Lx;
-        inscatter += reflexLight(X, Lx) * (0.25 / PI);
 
         // Пропускание интегрируется аналитически внутри шага — яркость
         // объёма не зависит от числа шагов превью и экспорта.

@@ -166,7 +166,7 @@ export class Renderer {
     opts: RenderOptions,
   ) {
     const gl = this.gl;
-    const { light, reflex, haze } = p;
+    const { light, haze } = p;
     this.scene.bind();
     this.pScene
       .use()
@@ -180,8 +180,6 @@ export class Renderer {
       .float('uLightRadius', light.radius)
       .float('uConeHalf', light.coneHalf)
       .float('uConeSoft', light.softness)
-      .vec3('uReflexPos', ...reflex.pos)
-      .vec3('uReflexColor', ...reflex.color)
       .vec3('uAlbedo', ...p.albedo)
       .vec3('uAmbient', ...p.ambient)
       .float('uRoughness', p.roughness)
