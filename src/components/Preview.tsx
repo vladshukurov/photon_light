@@ -6,9 +6,8 @@ import {
   useState,
   type PointerEvent,
   type CSSProperties,
-  type ReactNode,
 } from 'react';
-import { AlertCircle, Pause, Play, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Renderer } from '../engine/renderer';
 import { exportImage, exportLayers } from '../engine/export';
 import { loopProgress, type Look } from '../domain/look';
@@ -23,12 +22,8 @@ export interface PreviewHandle {
 
 interface Props {
   look: Look;
-  playing: boolean;
-  onPlayingChange: (playing: boolean) => void;
   onSourceChange: (angle: number, distance: number, group: string) => void;
   onReady: (ready: boolean) => void;
-  /** Что показать в доке слева от плеера (форматы). */
-  dock?: ReactNode;
 }
 
 const MAX_W = 1600,
@@ -36,14 +31,14 @@ const MAX_W = 1600,
   SETTLE_FRAMES = 8;
 
 export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
-  { look, playing, onPlayingChange, onSourceChange, onReady, dock },
+  { look, onSourceChange, onReady },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null),
-    areaRef = useRef<HTMLDivElement>(null),
-    barRef = useRef<HTMLDivElement>(null);
+    areaRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
-  const live = useRef({ look, playing, time: 0 });
+  // Время сцены. Пока моушена нет, кадр статичен: время стоит на нуле.
+  const live = useRef({ look, time: 0 });
   const invalidateRef = useRef<() => void>(() => {});
   const readyRef = useRef(onReady);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -60,9 +55,8 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
 
   useEffect(() => {
     live.current.look = look;
-    live.current.playing = playing;
     invalidateRef.current();
-  }, [look, playing]);
+  }, [look]);
 
   useEffect(() => {
     const area = areaRef.current;
@@ -93,7 +87,6 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
     let renderer: Renderer | null = null,
       raf = 0,
       frames = 0,
-      last = 0,
       disposed = false,
       lost = false;
 
@@ -104,30 +97,23 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
       readyRef.current(false);
     };
 
-    const draw = (now: number) => {
+    const draw = () => {
       raf = 0;
       if (disposed || lost || document.hidden || !renderer || canvas.width < 2) return;
-      const { look: l, playing: p } = live.current;
-      if (p) live.current.time += Math.min((now - (last || now)) / 1000, 0.1);
-      last = p ? now : 0;
-      const t = live.current.time;
+      const { look: l, time: t } = live.current;
       try {
         const scene = buildScene(l, canvas.width / canvas.height, {
           progress: loopProgress(t, l.motion.duration),
           time: t,
         });
         renderer.render(scene, canvas.width, canvas.height, {
-          hazeSteps: p ? 40 : 72,
+          hazeSteps: 72,
           frame: frames,
-          alpha: p ? Math.max(0.3, 1 / (frames + 1)) : 1 / (frames + 1),
+          alpha: 1 / (frames + 1),
         });
         frames++;
         if (frames === 1) setLoading(false);
-        if (barRef.current) {
-          const pr = l.motion.enabled ? loopProgress(t, l.motion.duration) : 0;
-          barRef.current.style.setProperty('--progress', String(pr));
-        }
-        if (p || frames < SETTLE_FRAMES) raf = requestAnimationFrame(draw);
+        if (frames < SETTLE_FRAMES) raf = requestAnimationFrame(draw);
       } catch (e) {
         fail(e);
       }
@@ -153,7 +139,6 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
       }
     };
     const onVisibility = () => {
-      last = 0;
       if (document.hidden) {
         cancelAnimationFrame(raf);
         raf = 0;
@@ -235,14 +220,6 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
     top: `${(0.5 - clampEdge(hv) * 0.5) * 100}%`,
   };
 
-  const scrub = (e: PointerEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const k = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    live.current.time = k * look.motion.duration;
-    onPlayingChange(false);
-    invalidateRef.current();
-  };
-
   return (
     <div className="preview" style={{ '--aspect': aspect } as CSSProperties}>
       <div ref={areaRef} className="preview-area">
@@ -295,43 +272,6 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
             </div>
           )}
         </div>
-      </div>
-      <div className="dock" ref={barRef}>
-        {dock}
-        <button
-          className="play-button"
-          aria-label={playing ? 'Пауза' : 'Воспроизвести'}
-          title={playing ? 'Пауза · Пробел' : 'Живой свет · Пробел'}
-          onClick={() => onPlayingChange(!playing)}
-        >
-          {playing ? (
-            <Pause size={15} fill="currentColor" />
-          ) : (
-            <Play size={15} fill="currentColor" />
-          )}
-        </button>
-        {look.motion.enabled ? (
-          <div
-            className="timeline"
-            role="slider"
-            aria-label="Положение прохода"
-            aria-valuemin={0}
-            aria-valuemax={1}
-            aria-valuenow={0}
-            tabIndex={0}
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              scrub(e);
-            }}
-            onPointerMove={(e) => {
-              if (e.currentTarget.hasPointerCapture(e.pointerId)) scrub(e);
-            }}
-          >
-            <i />
-          </div>
-        ) : (
-          <span className="dock-label">{playing ? 'Дымка течёт' : 'Живой свет'}</span>
-        )}
       </div>
     </div>
   );

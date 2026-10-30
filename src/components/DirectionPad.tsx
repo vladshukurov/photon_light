@@ -30,8 +30,9 @@ export function DirectionPad({
     fitH = 92;
   const fw = aspect >= fitW / fitH ? fitW : fitH * aspect;
   const fh = fw / aspect;
+  // Высота поля постоянная: смена формата не двигает панель.
   const W = BOX,
-    H = fh + PAD * 2;
+    H = fitH + PAD * 2;
   const cx = W / 2,
     cy = H / 2;
   const [hw, hh] = frameHalf(aspect);

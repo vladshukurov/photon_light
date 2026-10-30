@@ -32,16 +32,15 @@ export function Segmented<T extends string>({
   options: readonly { id: T; label: string; icon?: ReactNode }[];
   onChange: (id: T) => void;
 }) {
-  const index = Math.max(
-    0,
-    options.findIndex((o) => o.id === value),
-  );
+  // Значение не из списка (например, свой размер из JSON) — ни одна кнопка не выбрана.
+  const index = options.findIndex((o) => o.id === value);
   return (
     <div
       className="segmented"
       role="group"
       aria-label={label}
-      style={{ '--count': options.length, '--index': index } as CSSProperties}
+      style={{ '--count': options.length, '--index': Math.max(0, index) } as CSSProperties}
+      data-empty={index < 0 || undefined}
     >
       <i className="segmented-thumb" aria-hidden="true" />
       {options.map((o) => (

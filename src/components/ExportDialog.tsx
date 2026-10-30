@@ -11,6 +11,8 @@ type Kind = 'image' | 'video' | 'layers';
 type Preset = { id: string; label: string; width: number; height: number };
 
 const VIDEO_LIMIT = 1920;
+/** Вкладка видео вернётся вместе с моушеном. */
+const VIDEO_ENABLED = false;
 
 /** Готовые размеры в пропорции текущего формата. */
 function presetsFor(look: Look, kind: Kind): Preset[] {
@@ -177,9 +179,12 @@ export function ExportDialog({
             <Segmented
               label="Что экспортировать"
               value={kind}
+              // Видео скрыто, пока в инструменте нет моушена; запись готова в engine/export.
               options={[
                 { id: 'image', label: 'Картинка', icon: <Image size={14} /> },
-                { id: 'video', label: 'Видео', icon: <Film size={14} /> },
+                ...(VIDEO_ENABLED
+                  ? [{ id: 'video' as const, label: 'Видео', icon: <Film size={14} /> }]
+                  : []),
                 { id: 'layers', label: 'Слои', icon: <Layers size={14} /> },
               ]}
               onChange={switchKind}

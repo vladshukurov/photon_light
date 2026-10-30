@@ -94,7 +94,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   expect(errors).toEqual([]);
 });
 
-test('drags the light on the canvas and plays live light', async ({ page }) => {
+test('drags the light on the canvas', async ({ page }) => {
   await ready(page);
   const canvas = page.locator('.canvas-hit');
   const box = (await canvas.boundingBox())!;
@@ -107,10 +107,6 @@ test('drags the light on the canvas and plays live light', async ({ page }) => {
   );
   expect(angle).toBeGreaterThan(20);
 
-  await page.getByRole('button', { name: 'Воспроизвести' }).click();
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeVisible();
-  await page.waitForTimeout(600);
-  await page.getByRole('button', { name: 'Пауза' }).click();
   await expect(page.locator('.canvas-state')).toHaveCount(0);
 });
 
@@ -186,42 +182,6 @@ test('imports a prototype preset with 58 keys', async ({ page }) => {
     'aria-pressed',
     'true',
   );
-});
-
-test('records playable video at the requested size and supports cancellation', async ({ page }) => {
-  await ready(page);
-  await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Видео', exact: true }).click();
-  await customSize(dialog, 320, 180);
-  await dialog.getByRole('button', { name: '3 с', exact: true }).click();
-  const downloadPromise = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'Записать видео' }).click();
-  const video = await downloadPromise;
-  const bytes = (await readFile((await video.path())!)).toString('base64');
-  const info = await page.evaluate(
-    async ({ data, ext }) => {
-      const v = document.createElement('video');
-      v.muted = true;
-      v.src = `data:video/${ext};base64,${data}`;
-      await new Promise<void>((resolve, reject) => {
-        v.onloadeddata = () => resolve();
-        v.onerror = () => reject(new Error('Video decode failed'));
-      });
-      const ended = new Promise<void>((resolve) => {
-        v.onended = () => resolve();
-      });
-      await v.play();
-      await ended;
-      return { width: v.videoWidth, height: v.videoHeight, duration: v.duration };
-    },
-    { data: bytes, ext: video.suggestedFilename().endsWith('mp4') ? 'mp4' : 'webm' },
-  );
-  expect(info).toMatchObject({ width: 320, height: 180 });
-  expect(info.duration).toBeGreaterThan(2);
-  await dialog.getByRole('button', { name: 'Записать видео' }).click();
-  await dialog.getByRole('button', { name: 'Остановить запись' }).click();
-  await expect(dialog.getByRole('alert')).toContainText('остановлена');
 });
 
 test('fits mobile without horizontal overflow and switches format', async ({ page }) => {

@@ -388,113 +388,16 @@ button:disabled {
   }
 }
 
-.dock {
-  --progress: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: min(560px, 100%);
-  height: 50px;
-  padding: 0 14px 0 6px;
-  border-radius: 17px;
-  background: var(--glass);
-  box-shadow: var(--glass-rim), var(--float);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-}
-.formats {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  margin-right: 6px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.28);
-}
-.formats button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 32px;
-  padding: 0 11px;
-  border-radius: 9px;
-  color: var(--text-2);
-  font-size: 13px;
-  font-feature-settings: 'tnum';
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-.formats button i {
+/* Иконка пропорции формата. */
+.ratio {
   display: block;
-  height: 12px;
-  max-width: 18px;
+  height: 11px;
+  max-width: 17px;
   border: 1.4px solid currentColor;
   border-radius: 2.5px;
 }
-.formats button:hover {
-  color: var(--text);
-}
-.formats button[aria-pressed='true'] {
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--text);
-}
-.play-button {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #fff;
-  color: #07080a;
-  transition: transform 0.15s var(--ease);
-}
-.play-button:active {
-  transform: scale(0.92);
-}
-.dock-label {
-  flex: 1;
-  color: var(--text-2);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.timeline {
-  position: relative;
-  flex: 1;
-  min-width: 120px;
-  height: 28px;
-  margin-left: 4px;
-  cursor: pointer;
-  touch-action: none;
-}
-.timeline::before,
-.timeline i {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  height: 4px;
-  margin-top: -2px;
-  border-radius: 2px;
-}
-.timeline::before {
-  right: 0;
-  background: rgba(255, 255, 255, 0.12);
-}
-.timeline i {
-  width: calc(var(--progress) * 100%);
-  background: #fff;
-}
-.timeline i::after {
-  content: '';
-  position: absolute;
-  right: -7px;
-  top: -5px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.6);
+.segmented[data-empty] .segmented-thumb {
+  opacity: 0;
 }
 
 /* --- инспектор --------------------------------------------------------- */
@@ -1266,10 +1169,6 @@ kbd {
     margin: 8px 12px 0;
     overflow: visible;
   }
-  .dock {
-    min-width: 0;
-    width: 100%;
-  }
   .name-input {
     width: 120px;
     flex: none;
@@ -1285,15 +1184,6 @@ kbd {
   }
   .export-button {
     padding: 0 14px;
-  }
-  .formats button {
-    padding: 0 7px;
-  }
-  .formats button i {
-    display: none;
-  }
-  .dock-label {
-    display: none;
   }
   .export {
     grid-template-columns: 1fr;

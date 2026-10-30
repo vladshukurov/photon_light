@@ -5,7 +5,7 @@ import { Inspector } from './components/Inspector';
 import { ExportDialog } from './components/ExportDialog';
 import { Modal } from './components/Modal';
 import { useLook } from './hooks/useLook';
-import { DIRECTIONS, FORMATS, parseLook, serializeLook, type Look } from './domain/look';
+import { DIRECTIONS, parseLook, serializeLook, type Look } from './domain/look';
 import { download } from './engine/export';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -16,7 +16,6 @@ export default function App() {
   const preview = useRef<PreviewHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [ready, setReady] = useState(false);
-  const [playing, setPlaying] = useState(false);
   const [dialog, setDialog] = useState<'export' | 'help' | null>(null);
   const [toast, setToast] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -74,9 +73,6 @@ export default function App() {
       } else if (mod && e.code === 'KeyE') {
         e.preventDefault();
         if (ready) setDialog('export');
-      } else if (!mod && !typing && e.code === 'Space' && !target.closest('button,[role=slider]')) {
-        e.preventDefault();
-        setPlaying((p) => !p);
       } else if (!mod && !typing && /^Digit[1-6]$/.test(e.code)) {
         const d = DIRECTIONS[Number(e.code.slice(5)) - 1];
         change({ angle: d.angle, distance: 1 });
@@ -85,8 +81,6 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [dialog, undo, redo, save, ready, change]);
-
-  const format = FORMATS.find((f) => f.width === look.width && f.height === look.height);
 
   return (
     <div
@@ -193,25 +187,8 @@ export default function App() {
           <Preview
             ref={preview}
             look={look}
-            playing={playing}
-            onPlayingChange={setPlaying}
             onSourceChange={(angle, distance, group) => change({ angle, distance }, group)}
             onReady={setReady}
-            dock={
-              <div className="formats" role="group" aria-label="Формат">
-                {FORMATS.map((f) => (
-                  <button
-                    key={f.label}
-                    aria-pressed={format === f}
-                    title={`${f.width} × ${f.height}`}
-                    onClick={() => change({ width: f.width, height: f.height })}
-                  >
-                    <i style={{ aspectRatio: `${f.width} / ${f.height}` }} />
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            }
           />
         </section>
         <Inspector look={look} onChange={change} />
@@ -256,7 +233,6 @@ export default function App() {
 
 const SHORTCUTS = [
   ['1 – 6', 'Направления гайда'],
-  ['Пробел', 'Живой свет: пуск и пауза'],
   [`${MOD}Z / ⇧${MOD}Z`, 'Отменить и повторить'],
   [`${MOD}S`, 'Сохранить JSON'],
   [`${MOD}O`, 'Открыть JSON'],

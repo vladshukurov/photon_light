@@ -14,6 +14,7 @@ import {
   DEFAULT_LOOK,
   DIRECTIONS,
   directionOf,
+  FORMATS,
   RANGES,
   wrapAngle,
   type Look,
@@ -73,7 +74,31 @@ export function Inspector({
 
   return (
     <>
-      <aside className="panel panel-left" aria-label="Источник и окружение">
+      <aside className="panel panel-left" aria-label="Формат, источник и окружение">
+        <Card
+          title="Формат"
+          action={
+            <span className="card-meta">
+              {look.width} × {look.height}
+            </span>
+          }
+        >
+          <Segmented
+            label="Формат"
+            value={
+              FORMATS.find((f) => f.width === look.width && f.height === look.height)?.label ?? ''
+            }
+            options={FORMATS.map((f) => ({
+              id: f.label,
+              label: f.label,
+              icon: <i className="ratio" style={{ aspectRatio: `${f.width} / ${f.height}` }} />,
+            }))}
+            onChange={(label) => {
+              const f = FORMATS.find((x) => x.label === label)!;
+              onChange({ width: f.width, height: f.height });
+            }}
+          />
+        </Card>
         <Card
           title="Источник"
           action={
