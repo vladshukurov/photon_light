@@ -208,39 +208,31 @@ void main() {
   vec3 ambient = uAlbedo * uAmbient;
 
   /*
-    Надпись — выпуклая поверхность на стене, её освещает та же лампа.
+    Надпись — плоские светящиеся буквы на стене, как в макетах гайда.
 
-    Рельеф берётся из размытых mip-уровней маски: внутри буквы высота 1,
-    к краю спадает. Нормаль по градиенту высоты наклоняет кромки — грань,
-    повёрнутая к лампе, ловит свет вскользь и бликует, обратная уходит в тень.
-    Поэтому буквы светлеют со стороны источника и гаснут с удалением от него
-    по тому же закону, что и стена, а при смене направления свет на них
-    перестраивается сам. Свечение добавляет неоновую «собственную» яркость.
+    Объёма нет: буквы — белая поверхность, повёрнутая к камере. Лампа освещает
+    их по тому же закону, что и стену, поэтому сторона надписи у источника
+    ярче, а дальняя плавно гаснет — то, что в Figma рисуют линейным
+    градиентом, здесь получается само и перестраивается при смене направления.
+    Свечение — собственная яркость букв и мягкий ореол вокруг них (размытый
+    mip-уровень маски), он тоже сильнее со стороны света.
   */
   float textMask = 0.0;
   vec3 textLit = vec3(0.0);
+  vec3 textHalo = vec3(0.0);
   if (uTextOn == 1) {
     textMask = texture(uText, vUv).a;
-    if (textMask > 0.002) {
-      // Высота насыщается внутри буквы: лицо плоское, наклонена только фаска у края.
-      float lod = 2.0;
-      vec2 e = uTextTexel * exp2(lod);
-      float hL = min(1.0, textureLod(uText, vUv - vec2(e.x, 0.0), lod).a * 1.8);
-      float hR = min(1.0, textureLod(uText, vUv + vec2(e.x, 0.0), lod).a * 1.8);
-      float hD = min(1.0, textureLod(uText, vUv - vec2(0.0, e.y), lod).a * 1.8);
-      float hU = min(1.0, textureLod(uText, vUv + vec2(0.0, e.y), lod).a * 1.8);
-      vec3 Nt = normalize(vec3(-(hR - hL) * 2.4, -(hU - hD) * 2.4, 1.0));
-      vec3 Pt = vec3(c, 0.012);
+    float haloMask = textureLod(uText, vUv, 3.5).a;
+    if (textMask > 0.002 || haloMask > 0.002) {
+      vec3 Pt = vec3(c, 0.0);
       vec3 Lt;
       float dt;
       vec3 Et = spotLight(Pt, Lt, dt) * beamTransmittance(dt);
-      float NdotLt = max(dot(Nt, Lt), 0.0);
-      vec3 Ht = normalize(Lt + V);
-      float specT = ggx(max(dot(Nt, Ht), 0.0), pow(0.38, 4.0)) * 0.08;
-      vec3 albedoT = vec3(0.85);
-      textLit = (albedoT / PI + specT) * NdotLt * Et;
-      // Собственное свечение: ровное, чуть теплее у источника, гаснет с расстоянием.
-      textLit += uLightColor * uTextGlow * (0.8 + 2.4 / (1.0 + dt * dt * 1.2));
+      // Близость к лампе: 1 у источника, к дальнему краю надписи спадает.
+      float near = 1.0 / (1.0 + dt * dt * 1.4);
+      textLit = vec3(0.85) / PI * max(Lt.z, 0.0) * Et;
+      textLit += uLightColor * uTextGlow * (1.8 + 2.2 * near);
+      textHalo = uLightColor * uTextGlow * haloMask * (0.2 + 0.6 * near);
     }
   }
 
@@ -291,7 +283,7 @@ void main() {
   vec3 base = ambient * T + airlight;
   // Буквы закрывают стену под собой: их освещение заменяет освещение стены.
   base *= 1.0 - textMask;
-  lit = mix(lit, textLit, textMask);
+  lit = mix(lit, textLit, textMask) + textHalo * (1.0 - textMask);
   lit *= T * vig;
   vec3 air = haze * vig;
 
