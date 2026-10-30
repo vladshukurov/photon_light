@@ -19,6 +19,8 @@ uniform float uGrainScale;   // привязка размера зерна к р
 uniform float uSeed;
 uniform int   uTonemap;      // 0 — выкл (послойная выгрузка света), 1 — ACES
 uniform float uSaturation;   // трим насыщенности после tonemap
+uniform sampler2D uText;     // маска надписи; буквы кладутся поверх готового кадра
+uniform int   uTextFace;     // 1 — класть буквы (не в слое фона и объёма)
 
 // ACES fitted, Stephen Hill
 const mat3 ACESInput = mat3(
@@ -60,8 +62,7 @@ float hash(vec2 p) {
 
 void main() {
   vec4 sceneTex = texture(uScene, vUv);
-  // Альфа — белое лицо надписи. Оно не идёт в bloom: буквы чистые и резкие,
-  // а ореол появляется только там, куда на них падает свет (это в rgb).
+  // Альфа — ореол надписи: он мимо bloom, форма ровно как в гайде.
   vec3 scene = sceneTex.rgb + vec3(sceneTex.a);
   vec3 bloom = texture(uBloom, vUv).rgb;
   vec3 color = scene + bloom * uBloomIntensity;
@@ -90,6 +91,17 @@ void main() {
   }
 
   color = linearToSrgb(color);
+
+  /*
+    Буквы — поверх готового кадра, в sRGB, маской как прозрачностью. Если
+    добавлять их в линейный свет до тонмапа, ACES сжимает сглаженный край
+    (10–90% покрытия) в сплошной белый, и буквы идут лесенкой. Здесь край
+    остаётся ровно таким, каким его сгладил шрифтовой растеризатор.
+  */
+  if (uTextFace == 1) {
+    float m = texture(uText, vUv).a;
+    color = mix(color, vec3(0.97), m);
+  }
 
   // Треугольный дизер, независимый белый шум.
   float r1 = hash(gl_FragCoord.xy + uSeed);

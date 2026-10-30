@@ -54,6 +54,7 @@ export class Renderer {
   size: [number, number] = [0, 0];
   private pScene!: Program;
   private text!: TextTexture;
+  private hasText = false;
   private pDown!: Program;
   private pUp!: Program;
   private pComposite!: Program;
@@ -171,6 +172,7 @@ export class Renderer {
     const gl = this.gl;
     const { light, haze } = p;
     const hasText = this.text.update(p.text.content, p.text.size, w, h);
+    this.hasText = hasText;
     this.scene.bind();
     this.pScene
       .use()
@@ -267,6 +269,7 @@ export class Renderer {
     bloomTex: WebGLTexture,
     target: Fbo | null,
     tonemap = true,
+    textFace = false,
   ) {
     const gl = this.gl;
     if (target) {
@@ -285,7 +288,9 @@ export class Renderer {
       .float('uGrainScale', h / 1080)
       .float('uSeed', p.seed)
       .float('uSaturation', p.saturation)
-      .int('uTonemap', tonemap ? 1 : 0);
+      .int('uTonemap', tonemap ? 1 : 0)
+      .texture('uText', this.text.tex)
+      .int('uTextFace', textFace ? 1 : 0);
     gl.disable(gl.BLEND);
     this.draw();
   }
@@ -346,7 +351,8 @@ export class Renderer {
     // а не среднее по истории, которой у них нет.
     this.sceneFbo = opts.alpha == null ? this.scene : this.accumPass(opts.alpha);
     const bloomTex = this.bloomPass(p).tex;
-    this.compositePass(p, w, h, bloomTex, opts.target ?? null, opts.tonemap !== false);
+    const face = this.hasText && (mode === 'full' || mode === 'light' || mode === 'stack');
+    this.compositePass(p, w, h, bloomTex, opts.target ?? null, opts.tonemap !== false, face);
   }
 
   dispose() {

@@ -223,7 +223,6 @@ void main() {
     Лицо букв и ореол идут в альфу — мимо bloom: форма ровно как в гайде.
   */
   float textMask = 0.0;
-  float textFace = 0.0;
   float textGlowA = 0.0;
   vec3 textLit = vec3(0.0);
   if (uTextOn == 1) {
@@ -244,13 +243,16 @@ void main() {
     // Сила тоже прогрессивная: к дальней половине надписи свечения нет вовсе,
     // буквы там просто резкие — как «2026» в гайде.
     float strength = smoothstep(0.35, 1.0, along);
-    textGlowA = uTextGlow * strength * pow(blurred, 0.8) * 1.35 * (1.0 - textMask);
+    // Кривая с пологим началом: размытие хранится в 8 битах, и самые слабые
+    // значения нельзя усиливать — иначе переход 0 → 1/255 виден как ступень.
+    // Ореол лежит и под буквами: без вычитания маски у сглаженного края не
+    // появляется тёмная обводка.
+    textGlowA = uTextGlow * strength * pow(blurred, 1.35) * 2.3;
     if (textMask > 0.002) {
       vec3 Lt;
       float dt;
       vec3 Et = spotLight(vec3(c, 0.0), Lt, dt) * beamTransmittance(dt);
       textLit = vec3(0.85) / PI * max(Lt.z, 0.0) * Et * 0.25;
-      textFace = textMask * 3.2;
     }
   }
 
@@ -299,8 +301,6 @@ void main() {
   }
 
   vec3 base = ambient * T + airlight;
-  // Буквы закрывают стену под собой: их освещение заменяет освещение стены.
-  base *= 1.0 - textMask;
   // Лёгкий оттенок света бренда в ореоле.
   lit = mix(lit, textLit, textMask) + uLightColor * textGlowA * 0.06;
   lit *= T * vig;
@@ -314,6 +314,8 @@ void main() {
   else color = base + lit + air;
 
   // Лицо надписи — часть прямого света: в слое фона его нет.
-  float face = (uMode == MODE_BASE || uMode == MODE_HAZE) ? 0.0 : (textFace + textGlowA) * T.g;
+  // В альфе — ореол надписи мимо bloom. Сами буквы кладёт composite.frag
+  // поверх готового кадра, по маске как по прозрачности.
+  float face = (uMode == MODE_BASE || uMode == MODE_HAZE) ? 0.0 : textGlowA * T.g;
   fragColor = vec4(max(color, vec3(0.0)), face);
 }

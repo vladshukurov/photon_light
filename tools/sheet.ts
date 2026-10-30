@@ -7,6 +7,8 @@ import { Renderer } from '../src/engine/renderer';
 import { buildScene } from '../src/domain/scene';
 import { normalizeLook, type Look } from '../src/domain/look';
 import { renderPixels, pixelsToCanvas } from '../src/engine/export';
+import { TEXT_FONT_FAMILY } from '../src/engine/text';
+import condensed from '../src/assets/fonts/vk-condensed-600.woff2';
 
 interface Spec {
   cell: [number, number];
@@ -15,7 +17,10 @@ interface Spec {
   looks: (Partial<Look> & { progress?: number; time?: number })[];
 }
 
-await document.fonts.load('600 32px "VK Sans Display Condensed"');
+// Шрифт надписи — тот же файл, что в приложении.
+const face = new FontFace(TEXT_FONT_FAMILY, `url(${condensed})`, { weight: '600' });
+document.fonts.add(await face.load());
+
 const spec: Spec = JSON.parse(decodeURIComponent(location.hash.slice(1)));
 const [w, h] = spec.cell;
 const refs = spec.refs ?? [];
