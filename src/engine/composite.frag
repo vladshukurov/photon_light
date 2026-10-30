@@ -59,7 +59,10 @@ float hash(vec2 p) {
 }
 
 void main() {
-  vec3 scene = texture(uScene, vUv).rgb;
+  vec4 sceneTex = texture(uScene, vUv);
+  // Альфа — белое лицо надписи. Оно не идёт в bloom: буквы чистые и резкие,
+  // а ореол появляется только там, куда на них падает свет (это в rgb).
+  vec3 scene = sceneTex.rgb + vec3(sceneTex.a);
   vec3 bloom = texture(uBloom, vUv).rgb;
   vec3 color = scene + bloom * uBloomIntensity;
 

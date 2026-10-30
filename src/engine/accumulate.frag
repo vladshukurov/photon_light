@@ -33,8 +33,9 @@ uniform sampler2D uHistory;
 uniform float uAlpha;   // 1 — история отбрасывается, меньше — копим
 
 void main() {
-  vec3 cur = texture(uCurrent, vUv).rgb;
-  vec3 his = texture(uHistory, vUv).rgb;
+  // В альфе — лицо надписи мимо bloom (см. light.frag); копится вместе с цветом.
+  vec4 cur = texture(uCurrent, vUv);
+  vec4 his = texture(uHistory, vUv);
   float a = clamp(uAlpha, 0.0, 1.0);
-  fragColor = vec4(mix(his, cur, a), 1.0);
+  fragColor = mix(his, cur, a);
 }
