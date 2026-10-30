@@ -240,7 +240,11 @@ void main() {
                   : level < 2.0 ? mix(b1, b2, level - 1.0)
                                 : mix(b2, b3, level - 2.0);
     // Копия того же белого, что буквы; видна только вокруг них.
-    textGlowA = uTextGlow * blurred * 1.15 * (1.0 - textMask);
+    // Ореол яркий у края и быстро гаснет — узкое белое свечение, а не облако.
+    // Сила тоже прогрессивная: к дальней половине надписи свечения нет вовсе,
+    // буквы там просто резкие — как «2026» в гайде.
+    float strength = smoothstep(0.35, 1.0, along);
+    textGlowA = uTextGlow * strength * pow(blurred, 0.8) * 1.35 * (1.0 - textMask);
     if (textMask > 0.002) {
       vec3 Lt;
       float dt;
@@ -298,7 +302,7 @@ void main() {
   // Буквы закрывают стену под собой: их освещение заменяет освещение стены.
   base *= 1.0 - textMask;
   // Лёгкий оттенок света бренда в ореоле.
-  lit = mix(lit, textLit, textMask) + uLightColor * textGlowA * 0.15;
+  lit = mix(lit, textLit, textMask) + uLightColor * textGlowA * 0.06;
   lit *= T * vig;
   vec3 air = haze * vig;
 

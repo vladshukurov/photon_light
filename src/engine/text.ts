@@ -15,8 +15,23 @@
 export const TEXT_FONT_FAMILY = 'VK Sans Display Condensed';
 const font = (px: number) => `600 ${px}px "${TEXT_FONT_FAMILY}"`;
 
-/** Радиус сильного размытия в долях кегля (в гайде — 20 px на кегле ~100 px). */
-const BLUR_OF_FONT = 0.2;
+/*
+  document.fonts.check() отвечает «да», если подходящий шрифт вообще не
+  объявлен, — и маска навсегда запоминалась нарисованной системным шрифтом.
+  Поэтому проверяется именно загруженное начертание VK Sans Condensed, а
+  загрузка запускается, если её ещё не было.
+*/
+function fontLoaded() {
+  const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+  if (!fonts) return true;
+  for (const f of fonts)
+    if (f.family.replace(/["']/g, '') === TEXT_FONT_FAMILY && f.status === 'loaded') return true;
+  void fonts.load(font(32)).catch(() => {});
+  return false;
+}
+
+/** Радиус сильного размытия в долях кегля: узкий ореол вплотную к буквам, как в гайде. */
+const BLUR_OF_FONT = 0.05;
 const LEVELS = [1 / 3, 2 / 3, 1];
 
 /** Что шейдеру нужно знать о надписи, кроме текстур. */
@@ -49,7 +64,7 @@ export class TextTexture {
   update(content: string, size: number, width: number, height: number): boolean {
     if (!content) return false;
     // Шрифт мог догрузиться после первой отрисовки — тогда маску надо пересобрать.
-    const ready = typeof document.fonts?.check === 'function' && document.fonts.check(font(32));
+    const ready = fontLoaded();
     const key = `${content}|${size}|${width}x${height}|${ready}`;
     if (key === this.key) return true;
     this.key = key;

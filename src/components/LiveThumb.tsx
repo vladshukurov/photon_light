@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { buildScene } from '../domain/scene';
 import type { Look } from '../domain/look';
 import { drawThumb } from '../engine/thumbs';
@@ -21,6 +21,13 @@ export function LiveThumb({
   style?: CSSProperties;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // Шрифт надписи мог догрузиться после первой отрисовки — тогда перерисовать.
+  const [fontTick, setFontTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setFontTick((t) => t + 1);
+    document.fonts?.addEventListener('loadingdone', bump);
+    return () => document.fonts?.removeEventListener('loadingdone', bump);
+  }, []);
   const key = JSON.stringify({ ...look, name: '', motion: null, width: 0, height: 0 });
   useEffect(() => {
     const canvas = ref.current;
@@ -32,7 +39,7 @@ export function LiveThumb({
     return () => clearTimeout(timer);
     // key покрывает все поля look, которые влияют на кадр
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, width, height]);
+  }, [key, width, height, fontTick]);
   return (
     <canvas
       ref={ref}
