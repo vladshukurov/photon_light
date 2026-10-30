@@ -2,7 +2,7 @@
 precision highp float;
 
 /*
-  Сцена Фотона: одна белая лампа светит вскользь по стене сквозь дымку.
+  Сцена Фотона: прожектор светит вскользь по стене сквозь дымку.
 
   Камера ортографическая и смотрит вдоль −Z, стена — плоскость z = 0. Кадр
   складывается из трёх слагаемых, которые же уходят в послойную выгрузку:
@@ -11,8 +11,11 @@ precision highp float;
     light — прямой свет лампы на стене;
     air   — свет, рассеянный дымкой в камеру.
 
-  У основного VK свет белый. У сабрендов он окрашен в светлый акцент гайда;
-  ядро выжигает экспозиция, и цвет живёт в спаде и в дымке.
+  Источников два, как на баннерах арт-директора: сама лампа (uKey) — узкий
+  почти белый луч, падающий в кадр клином, — и ореол луча (uBounce) по той же
+  оси, широкий и мягкий, без своего пятна. В цветных версиях ореол — отлив
+  цветной стены: цвет бренда живёт в спаде и в воздухе, а не в горячей точке.
+  В ч/б версии VK ореол слабый и белый.
 
   Выход — линейный HDR. Экспозиция, bloom, ACES и гамма — в composite.frag.
 */
@@ -33,14 +36,18 @@ uniform int   uMode;
 uniform float uFrame;
 uniform float uTime;
 
-uniform vec3  uLightPos;
-uniform vec3  uLightDir;
-uniform vec3  uLightColor;     // цвет света бренда, линейный, нормирован по яркости
-uniform float uLightGain;
-uniform float uLightRadius;
-uniform float uConeHalf;
-uniform float uConeSoft;      // 0 — резкий край, 1 — широкая полутень
-
+struct Lamp {
+  vec3  pos;
+  vec3  dir;
+  vec3  color;     // линейный, нормирован по яркости
+  float gain;
+  float radius;    // размер излучателя: чем больше, тем мягче пятно у края
+  float decay;     // затухание по пути: свет не доходит до дальнего края кадра
+  float coneHalf;
+  float coneSoft;  // 0 — резкий край, 1 — широкая полутень
+};
+uniform Lamp uKey;
+uniform Lamp uBounce;
 
 uniform vec3  uAlbedo;
 uniform vec3  uAmbient;
@@ -133,28 +140,34 @@ float rayMask(float x, float dist) {
 }
 
 // Освещённость от лампы в точке X (без косинуса поверхности).
-vec3 spotLight(vec3 X, out vec3 L, out float dist) {
-  vec3 toL = uLightPos - X;
+vec3 lampAt(Lamp lamp, vec3 X, bool rays, out vec3 L, out float dist) {
+  vec3 toL = lamp.pos - X;
   dist = length(toL);
   L = toL / max(dist, 1e-5);
-  float r = uLightRadius;
-  float atten = 1.0 / (dist * dist + r * r);
+  float r = lamp.radius;
+  // Обратные квадраты дают степенной хвост, и свет растекается по всему кадру.
+  // На рефах спад экспоненциальный — свет гаснет по пути, как в плотном
+  // воздухе, — поэтому сверху ещё exp(−decay·dist).
+  float atten = exp(-lamp.decay * dist) / (dist * dist + r * r);
 
-  vec3 D = uLightDir;
+  vec3 D = lamp.dir;
   vec3 d = -L;
   float tz = dot(d, D);
-  vec3 side = normalize(cross(vec3(0.0, 0.0, 1.0), D) + vec3(1e-5, 0.0, 0.0));
-  float across = dot(d, side);
   // atan2, а не acos: за спиной прибора угол продолжается за 90°, а не заворачивается
   float theta = atan(length(d - D * tz), tz);
 
   // Обобщённый гаусс: мягкость — это степень, а не ширина. Яркость центра не меняется.
-  float w = max(uConeHalf + atan(r / max(dist, 1e-3)), 1e-3);
-  float n = 1.0 + 4.0 * (1.0 - uConeSoft) * (1.0 - uConeSoft);
+  float w = max(lamp.coneHalf + atan(r / max(dist, 1e-3)), 1e-3);
+  float n = 1.0 + 4.0 * (1.0 - lamp.coneSoft) * (1.0 - lamp.coneSoft);
   float profile = exp(-0.693147 * pow(max(theta / w, 1e-4), 2.0 * n));
 
-  float rays = rayMask(atan(across, max(tz, 1e-3)) / max(uConeHalf, 1e-3), dist);
-  return uLightColor * (uLightGain * atten * profile * rays);
+  float mask = 1.0;
+  if (rays) {
+    vec3 side = normalize(cross(vec3(0.0, 0.0, 1.0), D) + vec3(1e-5, 0.0, 0.0));
+    float across = dot(d, side);
+    mask = rayMask(atan(across, max(tz, 1e-3)) / max(lamp.coneHalf, 1e-3), dist);
+  }
+  return lamp.color * (lamp.gain * atten * profile * mask);
 }
 
 float hg(float cosA, float g) {
@@ -165,6 +178,11 @@ float hg(float cosA, float g) {
 // Вперёд — основной лепесток, назад — слабый: объём читается со всех сторон.
 float phase(float cosA) {
   return mix(hg(cosA, uHazeG), hg(cosA, -0.35), 0.18);
+}
+
+// Отлив приходит от большой стены, а не из точки: рассеяние почти изотропно.
+float phaseSoft(float cosA) {
+  return hg(cosA, 0.2);
 }
 
 /*
@@ -200,58 +218,62 @@ void main() {
   const vec3 V = vec3(0.0, 0.0, 1.0);
 
   // --- стена -------------------------------------------------------------
+  bool bounce = uBounce.gain > 0.0;
   vec3 L;
   float dist;
-  vec3 E = spotLight(P, L, dist) * beamTransmittance(dist);
+  vec3 E = lampAt(uKey, P, true, L, dist) * beamTransmittance(dist);
   float NdotL = max(L.z, 0.0);
   float a2 = pow(uRoughness, 4.0);
   vec3 H = normalize(L + V);
   float spec = ggx(max(H.z, 0.0), a2) * 0.04 * 0.25;
   vec3 lit = (uAlbedo / PI + spec) * NdotL * E;
+  if (bounce) {
+    vec3 Lb;
+    float db;
+    vec3 Eb = lampAt(uBounce, P, false, Lb, db) * beamTransmittance(db);
+    lit += uAlbedo / PI * max(Lb.z, 0.0) * Eb;
+  }
 
   vec3 ambient = uAlbedo * uAmbient;
 
   /*
-    Надпись — как в гайде «Работа со светом»: резкий белый слой букв поверх
-    его же копии с Progressive Blur.
+    Надпись — как в баннерах арт-директора (Figma 16719:174708): резкий белый
+    слой букв поверх его же копии с Progressive Blur.
 
     Копия размыта настоящим гауссом (три радиуса готовит text.ts). Вдоль оси
-    «дальний край → источник» размытие растёт от нуля до полного: у дальнего
-    края копия совпадает с буквами и не видна, у источника — мягкий белый
-    ореол. Ось берётся из положения лампы, поэтому свечение переезжает само.
+    «дальний край → источник» размытие растёт от нуля до полного: до середины
+    надписи копия совпадает с буквами и не видна, у края со стороны света —
+    тонкий яркий ореол. Начало и конец прогрессии — из макета (размытие 0 на
+    0.49 этой оси, полное — на 0.91). Ось берётся из положения лампы, поэтому
+    свечение переезжает само.
 
-    Лицо букв и ореол идут в альфу — мимо bloom: форма ровно как в гайде.
+    Ореол идёт в альфу и кладётся в composite.frag обычным наложением белого,
+    как слой в Figma, — без усиления и мимо bloom.
   */
   float textMask = 0.0;
   float textGlowA = 0.0;
   vec3 textLit = vec3(0.0);
   if (uTextOn == 1) {
     textMask = texture(uText, vUv).a;
-    vec2 dirL = normalize(uLightPos.xy + vec2(1e-5));
+    vec2 dirL = normalize(uKey.pos.xy + vec2(1e-5));
     float extent = max(abs(dirL.x) * uTextHalf.x + abs(dirL.y) * uTextHalf.y, 1e-3);
     float along = clamp(0.5 + 0.5 * dot(c, dirL) / extent, 0.0, 1.0);
     // Progressive: 0 — резко (копия под буквами не видна), 3 — полный радиус.
-    float level = along * 3.0;
+    float level = clamp((along - 0.49) / 0.42, 0.0, 1.0) * 3.0;
     float b1 = texture(uTextBlur1, vUv).a;
     float b2 = texture(uTextBlur2, vUv).a;
     float b3 = texture(uTextBlur3, vUv).a;
     float blurred = level < 1.0 ? mix(textMask, b1, level)
                   : level < 2.0 ? mix(b1, b2, level - 1.0)
                                 : mix(b2, b3, level - 2.0);
-    // Копия того же белого, что буквы; видна только вокруг них.
-    // Ореол яркий у края и быстро гаснет — узкое белое свечение, а не облако.
-    // Сила тоже прогрессивная: к дальней половине надписи свечения нет вовсе,
-    // буквы там просто резкие — как «2026» в гайде.
-    float strength = smoothstep(0.35, 1.0, along);
-    // Кривая с пологим началом: размытие хранится в 8 битах, и самые слабые
-    // значения нельзя усиливать — иначе переход 0 → 1/255 виден как ступень.
+    // Копия того же белого, что буквы, — её прозрачность и есть ореол.
     // Ореол лежит и под буквами: без вычитания маски у сглаженного края не
     // появляется тёмная обводка.
-    textGlowA = uTextGlow * strength * pow(blurred, 1.35) * 2.3;
+    textGlowA = uTextGlow * blurred;
     if (textMask > 0.002) {
       vec3 Lt;
       float dt;
-      vec3 Et = spotLight(vec3(c, 0.0), Lt, dt) * beamTransmittance(dt);
+      vec3 Et = lampAt(uKey, vec3(c, 0.0), true, Lt, dt) * beamTransmittance(dt);
       textLit = vec3(0.85) / PI * max(Lt.z, 0.0) * Et * 0.25;
     }
   }
@@ -276,8 +298,12 @@ void main() {
 
         vec3 Ls;
         float ds;
-        vec3 Es = spotLight(X, Ls, ds) * beamTransmittance(ds);
+        vec3 Es = lampAt(uKey, X, true, Ls, ds) * beamTransmittance(ds);
         vec3 inscatter = Es * phase(Ls.z);
+        if (bounce) {
+          vec3 Eb = lampAt(uBounce, X, false, Ls, ds) * beamTransmittance(ds);
+          inscatter += Eb * phaseSoft(Ls.z);
+        }
 
         // Пропускание интегрируется аналитически внутри шага — яркость
         // объёма не зависит от числа шагов превью и экспорта.
@@ -296,13 +322,13 @@ void main() {
   // --- спад от источника --------------------------------------------------
   float vig = 1.0;
   if (uVignette > 0.0001) {
-    float r = length(c - uLightPos.xy);
+    float r = length(c - uKey.pos.xy);
     vig = mix(1.0, 1.0 / (1.0 + r * r * 0.55), uVignette);
   }
 
   vec3 base = ambient * T + airlight;
   // Лёгкий оттенок света бренда в ореоле.
-  lit = mix(lit, textLit, textMask) + uLightColor * textGlowA * 0.06;
+  lit = mix(lit, textLit, textMask);
   lit *= T * vig;
   vec3 air = haze * vig;
 
@@ -314,8 +340,8 @@ void main() {
   else color = base + lit + air;
 
   // Лицо надписи — часть прямого света: в слое фона его нет.
-  // В альфе — ореол надписи мимо bloom. Сами буквы кладёт composite.frag
-  // поверх готового кадра, по маске как по прозрачности.
+  // В альфе — ореол надписи: composite.frag кладёт его и сами буквы поверх
+  // готового кадра, как слои в Figma.
   float face = (uMode == MODE_BASE || uMode == MODE_HAZE) ? 0.0 : textGlowA * T.g;
   fragColor = vec4(max(color, vec3(0.0)), face);
 }

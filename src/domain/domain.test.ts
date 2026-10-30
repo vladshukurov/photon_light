@@ -22,6 +22,7 @@ describe('Look boundary', () => {
     const l = look({
       name: 'Обложка',
       brand: 'music',
+      tone: 'blue',
       room: 'light',
       expression: 0.7,
       angle: 137,
@@ -39,6 +40,7 @@ describe('Look boundary', () => {
     const l = normalizeLook({
       brand: 'tiktok',
       room: 'neon',
+      tone: 'red',
       brightness: 99,
       haze: Number.NaN,
       angle: 370,
@@ -48,6 +50,7 @@ describe('Look boundary', () => {
     });
     expect(l.brand).toBe('vk');
     expect(l.room).toBe('dark');
+    expect(l.tone).toBe('mono');
     expect(l.brightness).toBe(1);
     expect(l.haze).toBe(DEFAULT_LOOK.haze);
     expect(l.angle).toBeCloseTo(10);
@@ -116,14 +119,36 @@ describe('one light rig', () => {
     }
   });
 
-  it('VK light is white; sub-brands tint only the light colour', () => {
-    const vk = buildScene(look({ brand: 'vk' }), 1);
-    const music = buildScene(look({ brand: 'music' }), 1);
+  it('VK mono is a white lamp with a faint white halo instead of a bounce', () => {
+    const vk = buildScene(look({ brand: 'vk', tone: 'mono' }), 1);
+    const blue = buildScene(look({ brand: 'vk', tone: 'blue' }), 1);
     expect(vk.light.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
-    expect(music.light.color).not.toEqual(vk.light.color);
-    expect({ ...music.light, color: null }).toEqual({ ...vk.light, color: null });
-    expect(music.albedo).toEqual(vk.albedo);
+    expect(vk.bounce.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
+    expect(vk.bounce.gain / vk.light.gain).toBeLessThan(blue.bounce.gain / blue.light.gain);
     expect(Math.max(...vk.albedo) - Math.min(...vk.albedo)).toBeLessThan(0.002);
+  });
+
+  it('brand colour lives in the bounce; the lamp stays nearly white', () => {
+    const blue = buildScene(look({ brand: 'vk', tone: 'blue' }), 1);
+    const music = buildScene(look({ brand: 'music' }), 1);
+    for (const s of [blue, music]) {
+      expect(s.bounce.gain).toBeGreaterThan(0);
+      // Отлив — шире и мягче лампы: своего пятна у него нет.
+      expect(s.bounce.coneHalf).toBeGreaterThan(s.light.coneHalf);
+      expect(s.bounce.radius).toBeGreaterThan(s.light.radius);
+      // Ядро — почти белое: каналы лампы ближе друг к другу, чем у отлива.
+      const spread = (c: number[]) => Math.max(...c) - Math.min(...c);
+      expect(spread(s.light.color)).toBeLessThan(spread(s.bounce.color));
+    }
+    // Тон касается только VK.
+    expect(buildScene(look({ brand: 'music', tone: 'mono' }), 1)).toEqual(music);
+    // Геометрия и материал одинаковы у всех брендов и версий.
+    const mono = buildScene(look({ brand: 'vk', tone: 'mono' }), 1);
+    for (const s of [blue, music]) {
+      expect(s.light.pos).toEqual(mono.light.pos);
+      expect(s.light.dir).toEqual(mono.light.dir);
+      expect(s.albedo).toEqual(mono.albedo);
+    }
   });
 
   it('switching room keeps the light placement', () => {
@@ -206,8 +231,8 @@ describe('tone', () => {
     expect(luma(trimInverse(c, 1.6))).toBeCloseTo(luma(c), 6);
   });
 
-  it('every brand light is a valid colour', () => {
-    for (const b of BRANDS) for (const c of [b.light]) expect(c).toMatch(/^#[0-9A-F]{6}$/);
+  it('every brand accent is a valid colour', () => {
+    for (const b of BRANDS) expect(b.accent).toMatch(/^#[0-9A-F]{6}$/);
   });
 });
 

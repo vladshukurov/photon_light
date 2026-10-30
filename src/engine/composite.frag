@@ -3,7 +3,8 @@ precision highp float;
 
 /*
   Финальный проход. Порядок строгий:
-    bloom -> ACES (fitted) -> linear->sRGB (точный OETF) -> дизер -> зерно.
+    bloom -> ACES (fitted) с линейным носком -> linear->sRGB (точный OETF)
+    -> дизер -> зерно.
   Дизер обязателен: тёмный градиент в 8 битах без него идёт кольцами.
 */
 
@@ -47,6 +48,22 @@ vec3 acesFitted(vec3 color) {
   return clamp(color, 0.0, 1.0);
 }
 
+/*
+  Носок кривой — линейный. У ACES fitted в тенях сильный носок: вдвое меньше
+  света — втрое темнее на выходе, и мягкий заход света сжимается в горячее
+  пятно у края. Ниже точки касания (0.457) кривая заменена касательной из
+  нуля: тени идут линейно, как градиенты в рефах, а света и выжженное ядро
+  остаются ACES. Переход — по яркости, со сглаживанием, чтобы цветной свет
+  не давал шва. JS-копия — tone.ts.
+*/
+const float TOE_KNEE = 0.4575;
+const float TOE_SLOPE = 0.7505;
+
+vec3 tonemap(vec3 c) {
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  return clamp(mix(c * TOE_SLOPE, acesFitted(c), smoothstep(0.6 * TOE_KNEE, TOE_KNEE, l)), 0.0, 1.0);
+}
+
 vec3 linearToSrgb(vec3 c) {
   c = clamp(c, 0.0, 1.0);
   return mix(c * 12.92,
@@ -62,13 +79,12 @@ float hash(vec2 p) {
 
 void main() {
   vec4 sceneTex = texture(uScene, vUv);
-  // Альфа — ореол надписи: он мимо bloom, форма ровно как в гайде.
-  vec3 scene = sceneTex.rgb + vec3(sceneTex.a);
+  vec3 scene = sceneTex.rgb;
   vec3 bloom = texture(uBloom, vUv).rgb;
   vec3 color = scene + bloom * uBloomIntensity;
 
   if (uTonemap == 1) {
-    color = acesFitted(color);
+    color = tonemap(color);
   } else {
     color = clamp(color, 0.0, 1.0);
   }
@@ -93,11 +109,13 @@ void main() {
   color = linearToSrgb(color);
 
   /*
-    Буквы — поверх готового кадра, в sRGB, маской как прозрачностью. Если
-    добавлять их в линейный свет до тонмапа, ACES сжимает сглаженный край
-    (10–90% покрытия) в сплошной белый, и буквы идут лесенкой. Здесь край
-    остаётся ровно таким, каким его сгладил шрифтовой растеризатор.
+    Надпись — поверх готового кадра, в sRGB, как слои в Figma: сначала
+    размытая копия (альфа сцены) обычным наложением белого, сверху резкие
+    буквы маской как прозрачностью. Если добавлять их в линейный свет до
+    тонмапа, ACES сжимает сглаженный край (10–90% покрытия) в сплошной белый,
+    буквы идут лесенкой, а ореол разбухает в облако.
   */
+  color = mix(color, vec3(1.0), clamp(sceneTex.a, 0.0, 1.0));
   if (uTextFace == 1) {
     float m = texture(uText, vUv).a;
     color = mix(color, vec3(0.97), m);

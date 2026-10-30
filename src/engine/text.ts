@@ -1,11 +1,13 @@
 /*
   Надпись для шейдера: резкая маска и три размытые копии.
 
-  Так же, как в гайде «Работа со светом»: верхний слой букв резкий, под ним —
-  та же надпись, размытая Progressive Blur'ом. Копии размыты настоящим
-  гауссовым blur() канваса (тем же, что даёт Layer Blur в Figma) с тремя
-  радиусами; шейдер плавно переходит между резкой маской и сильным размытием
-  вдоль оси к источнику света.
+  Так же, как в баннерах арт-директора (Figma 16719:174708): верхний слой букв
+  резкий, под ним — та же надпись, размытая Progressive Blur'ом. Копии размыты
+  настоящим гауссовым blur() канваса с тремя радиусами; шейдер плавно
+  переходит между резкой маской и сильным размытием вдоль оси к источнику.
+
+  Набор — как в макете: VK Sans Display Condensed Medium, трекинг −4%,
+  интерлиньяж 87%.
 
   Радиусы заданы в долях кегля, поэтому свечение одинаково на холсте, в
   миниатюрах и в экспорте 4K. Перерисовка — только при смене текста, размера
@@ -13,7 +15,10 @@
 */
 
 export const TEXT_FONT_FAMILY = 'VK Sans Display Condensed';
-const font = (px: number) => `600 ${px}px "${TEXT_FONT_FAMILY}"`;
+export const TEXT_FONT_WEIGHT = 500;
+const font = (px: number) => `${TEXT_FONT_WEIGHT} ${px}px "${TEXT_FONT_FAMILY}"`;
+const TRACKING = -0.04;
+const LEADING = 0.87;
 
 /*
   document.fonts.check() отвечает «да», если подходящий шрифт вообще не
@@ -25,13 +30,22 @@ function fontLoaded() {
   const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
   if (!fonts) return true;
   for (const f of fonts)
-    if (f.family.replace(/["']/g, '') === TEXT_FONT_FAMILY && f.status === 'loaded') return true;
+    if (
+      f.family.replace(/["']/g, '') === TEXT_FONT_FAMILY &&
+      f.weight === String(TEXT_FONT_WEIGHT) &&
+      f.status === 'loaded'
+    )
+      return true;
   void fonts.load(font(32)).catch(() => {});
   return false;
 }
 
-/** Радиус сильного размытия в долях кегля: узкий ореол вплотную к буквам, как в гайде. */
-const BLUR_OF_FONT = 0.05;
+/*
+  Радиус сильного размытия в долях кегля. В макете Layer Blur 19.4 при кегле
+  140; радиус Figma — это примерно две сигмы гаусса, а blur() канваса
+  принимает сигму.
+*/
+const BLUR_OF_FONT = 19.4 / 140 / 2;
 const LEVELS = [1 / 3, 2 / 3, 1];
 
 /** Что шейдеру нужно знать о надписи, кроме текстур. */
@@ -77,14 +91,19 @@ export class TextTexture {
     ctx.clearRect(0, 0, width, height);
     const short = Math.min(width, height);
     let px = Math.max(8, Math.round(size * short));
-    ctx.font = font(px);
+    const setFont = (size: number) => {
+      ctx.font = font(size);
+      // Трекинг макета; там, где canvas его не умеет, буквы чуть шире.
+      if ('letterSpacing' in ctx) ctx.letterSpacing = `${(TRACKING * size).toFixed(2)}px`;
+    };
+    setFont(px);
     const lines = content.split('\n');
     // Надпись не шире 86% кадра: длинная строка ужимается целиком.
     const widest = Math.max(...lines.map((l) => ctx.measureText(l).width), 1);
     const fit = Math.min(1, (width * 0.86) / widest);
     px = Math.max(8, Math.round(px * fit));
-    const lead = px * 0.92;
-    ctx.font = font(px);
+    const lead = px * LEADING;
+    setFont(px);
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

@@ -170,23 +170,30 @@ export class Renderer {
     opts: RenderOptions,
   ) {
     const gl = this.gl;
-    const { light, haze } = p;
+    const { haze } = p;
     const hasText = this.text.update(p.text.content, p.text.size, w, h);
     this.hasText = hasText;
     this.scene.bind();
-    this.pScene
-      .use()
+    const prog = this.pScene.use();
+    for (const [name, lamp] of [
+      ['uKey', p.light],
+      ['uBounce', p.bounce],
+    ] as const) {
+      prog
+        .vec3(`${name}.pos`, ...lamp.pos)
+        .vec3(`${name}.dir`, ...lamp.dir)
+        .vec3(`${name}.color`, ...lamp.color)
+        .float(`${name}.gain`, lamp.gain)
+        .float(`${name}.radius`, lamp.radius)
+        .float(`${name}.decay`, lamp.decay)
+        .float(`${name}.coneHalf`, lamp.coneHalf)
+        .float(`${name}.coneSoft`, lamp.softness);
+    }
+    prog
       .vec2('uResolution', w, h)
       .int('uMode', MODES[mode])
       .float('uFrame', opts.frame ?? 0)
       .float('uTime', opts.time ?? p.time)
-      .vec3('uLightPos', ...light.pos)
-      .vec3('uLightDir', ...light.dir)
-      .vec3('uLightColor', ...light.color)
-      .float('uLightGain', light.gain)
-      .float('uLightRadius', light.radius)
-      .float('uConeHalf', light.coneHalf)
-      .float('uConeSoft', light.softness)
       .vec3('uAlbedo', ...p.albedo)
       .vec3('uAmbient', ...p.ambient)
       .float('uRoughness', p.roughness)

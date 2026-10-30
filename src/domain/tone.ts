@@ -1,7 +1,8 @@
 import { hexToSrgb, srgbToLinear } from './color';
 
 /*
-  JS-копия тонального конвейера composite.frag: ACES fitted (Hill) и трим
+  JS-копия тонального конвейера composite.frag: ACES fitted (Hill) с линейным
+  носком и трим
   насыщенности. Нужна для обратной задачи светлой комнаты — какой общий свет
   даст на выходе ровно цвет гайда #C7CBD6. Держать кривую в двух местах
   неприятно, но читать кадр с GPU ради одной константы — хуже.
@@ -29,9 +30,18 @@ export const luma = (c: number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[
 const fit = (x: number) =>
   (x * (x + 0.0245786) - 0.000090537) / (x * (0.983729 * x + 0.432951) + 0.238081);
 
+/** Линейный носок ниже точки касания из нуля — как tonemap() в composite.frag. */
+const TOE_KNEE = 0.4575;
+const TOE_SLOPE = 0.7505;
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
 export function aces(c: number[]): Vec3 {
   const o = mul(ACES_OUT, mul(ACES_IN, c).map(fit));
-  return o.map((v) => Math.min(1, Math.max(0, v))) as Vec3;
+  const k = smooth(0.6 * TOE_KNEE, TOE_KNEE, luma(c));
+  return o.map((v, i) => Math.min(1, Math.max(0, c[i] * TOE_SLOPE * (1 - k) + v * k))) as Vec3;
 }
 
 /** Обратная к ACES. Кривая монотонна по каналам — покомпонентная итерация сходится до 1e-6. */

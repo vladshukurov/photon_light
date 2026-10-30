@@ -3,22 +3,24 @@
   Только для разработки: npm run dev → /tools/sheet.html#<json>.
   Хеш — { cell: [w, h], cols, refs?: string[], looks: Partial<Look>[] }.
 */
-import { Renderer } from '../src/engine/renderer';
+import { Renderer, type RenderOptions } from '../src/engine/renderer';
 import { buildScene } from '../src/domain/scene';
 import { normalizeLook, type Look } from '../src/domain/look';
 import { renderPixels, pixelsToCanvas } from '../src/engine/export';
-import { TEXT_FONT_FAMILY } from '../src/engine/text';
-import condensed from '../src/assets/fonts/vk-condensed-600.woff2';
+import { TEXT_FONT_FAMILY, TEXT_FONT_WEIGHT } from '../src/engine/text';
+import condensed from '../src/assets/fonts/vk-condensed-500.woff2';
 
 interface Spec {
   cell: [number, number];
   cols: number;
   refs?: string[];
-  looks: (Partial<Look> & { progress?: number; time?: number })[];
+  looks: (Partial<Look> & { progress?: number; time?: number; mode?: RenderOptions['mode'] })[];
 }
 
 // Шрифт надписи — тот же файл, что в приложении.
-const face = new FontFace(TEXT_FONT_FAMILY, `url(${condensed})`, { weight: '600' });
+const face = new FontFace(TEXT_FONT_FAMILY, `url(${condensed})`, {
+  weight: String(TEXT_FONT_WEIGHT),
+});
 document.fonts.add(await face.load());
 
 const spec: Spec = JSON.parse(decodeURIComponent(location.hash.slice(1)));
@@ -46,7 +48,7 @@ for (const src of refs) {
 for (const raw of spec.looks) {
   const look = normalizeLook({ ...raw, width: raw.width ?? w, height: raw.height ?? h });
   const scene = buildScene(look, w / h, { progress: raw.progress ?? 0, time: raw.time ?? 0 });
-  const px = renderPixels(renderer, scene, w, h, { hazeSteps: 96 });
+  const px = renderPixels(renderer, scene, w, h, { hazeSteps: 96, mode: raw.mode });
   const [x, y] = place(i++);
   ctx.drawImage(pixelsToCanvas(px, w, h), x, y);
 }

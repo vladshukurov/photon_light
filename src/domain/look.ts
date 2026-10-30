@@ -12,6 +12,8 @@ import { isBrand, type BrandId } from './brands';
 */
 
 export type Room = 'dark' | 'light';
+/** Версия основного VK: ч/б или с лёгким синим отливом. Сабрендов не касается. */
+export type Tone = 'mono' | 'blue';
 
 export interface Motion {
   enabled: boolean;
@@ -24,6 +26,7 @@ export interface Motion {
 export interface Look {
   name: string;
   brand: BrandId;
+  tone: Tone;
   room: Room;
   angle: number;
   distance: number;
@@ -84,6 +87,7 @@ export type NumericKey = keyof typeof RANGES;
 export const DEFAULT_LOOK: Look = {
   name: 'Новый свет',
   brand: 'vk',
+  tone: 'mono',
   room: 'dark',
   angle: -45,
   distance: 1,
@@ -133,6 +137,7 @@ export function normalizeLook(raw: unknown): Look {
   if (typeof src.name === 'string' && src.name.trim()) look.name = src.name.trim().slice(0, 80);
   if (isBrand(src.brand)) look.brand = src.brand;
   if (src.room === 'dark' || src.room === 'light') look.room = src.room;
+  if (src.tone === 'mono' || src.tone === 'blue') look.tone = src.tone;
   if (typeof src.text === 'string') look.text = src.text.slice(0, 120);
   // Файлы с переключателем «характер» (до ползунка): vivid — это выразительность 100%.
   if (src.character === 'vivid') look.expression = 1;

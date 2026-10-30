@@ -154,6 +154,17 @@ export function Inspector({
               </button>
             ))}
           </div>
+          {look.brand === 'vk' && (
+            <Segmented
+              label="Версия VK"
+              value={look.tone}
+              options={[
+                { id: 'mono', label: 'Ч/б' },
+                { id: 'blue', label: 'Синий отлив' },
+              ]}
+              onChange={(tone) => onChange({ tone })}
+            />
+          )}
           <Segmented
             label="Комната"
             value={look.room}
