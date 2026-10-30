@@ -96,15 +96,12 @@ button:disabled {
 
 /* --- каркас ------------------------------------------------------------ */
 
-/* Доска: статичная, от сцены не зависит. Точечная сетка как в редакторах —
-   на ней видно, что панели стеклянные и лежат поверх. */
+/* Доска: статичная, от сцены не зависит. */
 .app {
   position: relative;
   height: 100dvh;
   overflow: hidden;
-  background:
-    radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1.2px) 0 0 / 22px 22px,
-    linear-gradient(180deg, #0b0b0b 0%, #050505 100%);
+  background: linear-gradient(180deg, #0b0b0b 0%, #050505 100%);
 }
 
 .glass {
@@ -872,9 +869,7 @@ button:disabled {
   min-height: 280px;
   padding: 20px;
   border-radius: 16px;
-  background:
-    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.2px) 0 0 / 16px 16px,
-    rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.35);
 }
 .export-thumb {
   display: block;
