@@ -62,7 +62,9 @@ uniform float uVignette;
 uniform int       uTextOn;
 uniform sampler2D uText;      // белые буквы на прозрачном, с mip-уровнями
 uniform vec2      uTextTexel;
-uniform float     uTextGlow;  // собственное свечение букв
+uniform vec2      uTextHalf;  // половины блока надписи, доли короткой стороны
+uniform float     uTextPx;    // кегль в пикселях текстуры
+uniform float     uTextGlow;  // сила свечения
 
 // --- шум ---------------------------------------------------------------
 
@@ -208,34 +210,52 @@ void main() {
   vec3 ambient = uAlbedo * uAmbient;
 
   /*
-    Надпись — плоские белые буквы на стене, как в макетах гайда.
+    Надпись — как в гайде «Работа со светом»: резкий белый слой букв поверх
+    его же размытой копии.
 
-    Белое лицо букв уходит в альфу и мимо bloom: везде одинаково чистое и
-    резкое, без свечения. В цвет (и значит в bloom) идёт только свет лампы,
-    упавший на буквы: он сильнее у источника и гаснет по тому же закону, что
-    на стене. Поэтому ореол и пересвет появляются только у букв, на которые
-    действительно светят, — дальние остаются просто белыми, как на макете.
+    Размытие прогрессивное: максимальное со стороны источника и сходит на нет
+    к дальнему краю надписи (в Figma — Progressive Blur, Start 20 → End 0).
+    Ось берётся из настоящего положения лампы, поэтому при смене направления
+    свечение переезжает само. Радиус задан в долях кегля и не зависит от
+    разрешения: в превью, миниатюре и экспорте 4K свечение одинаковое.
+
+    Лицо букв и свечение идут в альфу — мимо bloom, форма точно как в гайде.
+    В цвет идёт только отражённый свет лампы и лёгкий оттенок бренда.
   */
   float textMask = 0.0;
   float textFace = 0.0;
+  float textGlowA = 0.0;
   vec3 textLit = vec3(0.0);
-  vec3 textHalo = vec3(0.0);
   if (uTextOn == 1) {
     textMask = texture(uText, vUv).a;
-    float haloMask = textureLod(uText, vUv, 3.5).a;
-    if (textMask > 0.002 || haloMask > 0.002) {
+    // Где по оси «дальний край → источник» стоит пиксель: 0 — дальний край, 1 — ближний.
+    vec2 toLight = uLightPos.xy;
+    float lenL = max(length(toLight), 1e-4);
+    vec2 dirL = toLight / lenL;
+    float extent = max(abs(dirL.x) * uTextHalf.x + abs(dirL.y) * uTextHalf.y, 1e-3);
+    float along = clamp(0.5 + 0.5 * dot(c, dirL) / extent, 0.0, 1.0);
+    float ramp = smoothstep(0.0, 1.0, along);
+    // Радиус размытия: до ~12% кегля у источника, ноль у дальнего края.
+    float blurPx = uTextPx * 0.12 * (0.4 + uTextGlow) * ramp;
+    // Mip-уровень даёт грубое размытие, восемь выборок по кругу сглаживают его
+    // до мягкого, почти гауссова — как Layer Blur в Figma.
+    float lod = log2(max(blurPx, 1.0));
+    vec2 r = uTextTexel * blurPx * 0.75;
+    float blurred = textureLod(uText, vUv, lod).a * 0.2;
+    for (int k = 0; k < 8; ++k) {
+      float a = float(k) * 0.785398;
+      blurred += textureLod(uText, vUv + r * vec2(cos(a), sin(a)), lod).a * 0.1;
+    }
+    // Размытая копия под резким слоем: видна вокруг букв, внутри её закрывает лицо.
+    // Ореол заметно тусклее лица букв: иначе края тонут в нём, и надпись выглядит размытой.
+    textGlowA = min(blurred * ramp * uTextGlow * 2.0, 0.55) * (1.0 - textMask);
+    if (textMask > 0.002) {
       vec3 Lt;
       float dt;
       vec3 Et = spotLight(vec3(c, 0.0), Lt, dt) * beamTransmittance(dt);
-      // Свет, отражённый буквой: белая поверхность, Ламберт, как у стены.
-      vec3 reflected = vec3(0.85) / PI * max(Lt.z, 0.0) * Et;
-      float amount = dot(reflected, vec3(0.2126, 0.7152, 0.0722));
-      // Ореол — только от сильного света: слабый лишь чуть подсвечивает белое
-      // и остаётся ниже порога bloom, поэтому дальние буквы не светятся.
-      float strong = smoothstep(0.3, 1.6, amount);
-      textLit = reflected * (0.15 + strong * (1.0 + 2.5 * uTextGlow));
-      textHalo = uLightColor * haloMask * amount * strong * uTextGlow * 1.6;
-      textFace = textMask * 2.4;
+      textLit = vec3(0.85) / PI * max(Lt.z, 0.0) * Et * 0.25;
+      // Буквы со стороны источника чуть горячее — как свет, падающий на них.
+      textFace = textMask * (3.2 + 1.5 * ramp * uTextGlow);
     }
   }
 
@@ -286,7 +306,7 @@ void main() {
   vec3 base = ambient * T + airlight;
   // Буквы закрывают стену под собой: их освещение заменяет освещение стены.
   base *= 1.0 - textMask;
-  lit = mix(lit, textLit, textMask) + textHalo * (1.0 - textMask);
+  lit = mix(lit, textLit, textMask) + uLightColor * textGlowA * 0.3;
   lit *= T * vig;
   vec3 air = haze * vig;
 
@@ -298,6 +318,6 @@ void main() {
   else color = base + lit + air;
 
   // Лицо надписи — часть прямого света: в слое фона его нет.
-  float face = (uMode == MODE_BASE || uMode == MODE_HAZE) ? 0.0 : textFace * T.g * vig;
+  float face = (uMode == MODE_BASE || uMode == MODE_HAZE) ? 0.0 : (textFace + textGlowA) * T.g;
   fragColor = vec4(max(color, vec3(0.0)), face);
 }

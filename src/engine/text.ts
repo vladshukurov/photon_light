@@ -12,9 +12,18 @@
 export const TEXT_FONT_FAMILY = 'VK Sans Display Condensed';
 const font = (px: number) => `600 ${px}px "${TEXT_FONT_FAMILY}"`;
 
+/** Что шейдеру нужно знать о надписи, кроме маски. */
+export interface TextLayout {
+  /** Половины ширины и высоты блока надписи в долях короткой стороны кадра. */
+  half: [number, number];
+  /** Кегль в пикселях текстуры — от него считается радиус свечения. */
+  px: number;
+}
+
 export class TextTexture {
   readonly tex: WebGLTexture;
   private key = '';
+  layout: TextLayout = { half: [0, 0], px: 1 };
   private readonly canvas = document.createElement('canvas');
 
   constructor(private readonly gl: WebGL2RenderingContext) {
@@ -52,6 +61,11 @@ export class TextTexture {
     if (fit < 1) ctx.font = font(Math.round(px * fit));
     const top = height / 2 - ((lines.length - 1) * lead * Math.min(1, fit)) / 2;
     lines.forEach((l, i) => ctx.fillText(l, width / 2, top + i * lead * Math.min(1, fit)));
+    const short = Math.min(width, height);
+    this.layout = {
+      half: [(widest * fit) / 2 / short, (lines.length * lead * fit) / 2 / short],
+      px: px * fit,
+    };
     this.upload(width, height, c);
     return true;
   }
