@@ -9,13 +9,13 @@ import {
 } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Renderer } from '../engine/renderer';
-import { exportImage, exportLayers } from '../engine/export';
+import { exportImage, exportLayers, type Layer } from '../engine/export';
 import { loopProgress, type Look } from '../domain/look';
 import { buildScene, sourceFromFrame, sourceOnFrame } from '../domain/scene';
 
 export interface PreviewHandle {
   image: (format: 'png' | 'jpg', width: number, height: number) => Promise<Blob>;
-  layers: (width: number, height: number) => Promise<boolean>;
+  layers: (width: number, height: number) => Promise<{ layers: Layer[]; clipped: boolean }>;
   /** Доля прохода, которую сейчас показывает превью: её же получит экспорт кадра. */
   progress: () => number;
 }
@@ -144,6 +144,8 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
         raf = 0;
       } else invalidate();
     };
+    // Шрифт надписи может догрузиться после первого кадра — тогда маска пересобирается.
+    document.fonts?.addEventListener('loadingdone', invalidate);
     canvas.addEventListener('webglcontextlost', onLost);
     canvas.addEventListener('webglcontextrestored', onRestored);
     document.addEventListener('visibilitychange', onVisibility);
@@ -161,6 +163,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
       disposed = true;
       cancelAnimationFrame(raf);
       invalidateRef.current = () => {};
+      document.fonts?.removeEventListener('loadingdone', invalidate);
       canvas.removeEventListener('webglcontextlost', onLost);
       canvas.removeEventListener('webglcontextrestored', onRestored);
       document.removeEventListener('visibilitychange', onVisibility);
@@ -190,13 +193,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
       },
       async layers(width, height) {
         try {
-          return await exportLayers(
-            current(),
-            sceneFor(width, height),
-            width,
-            height,
-            live.current.look.name,
-          );
+          return await exportLayers(current(), sceneFor(width, height), width, height);
         } finally {
           invalidateRef.current();
         }

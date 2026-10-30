@@ -2,6 +2,10 @@ import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import { TEXT_FONT_FAMILY } from './engine/text';
+
+// Шрифт надписи нужен шейдеру ещё до того, как он встретится в интерфейсе.
+void document.fonts?.load(`600 32px "${TEXT_FONT_FAMILY}"`);
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {

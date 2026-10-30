@@ -1,4 +1,4 @@
-import { brandById, LIGHT_ROOM } from './brands';
+import { brandById, DARK_WALL, LIGHT_ROOM } from './brands';
 import { angleAt, type Look } from './look';
 import { linear, luma, solveAmbient } from './tone';
 
@@ -13,12 +13,22 @@ import { linear, luma, solveAmbient } from './tone';
 export type Vec3 = [number, number, number];
 
 export interface Scene {
-  light: { pos: Vec3; dir: Vec3; coneHalf: number; softness: number; gain: number; radius: number };
+  light: {
+    pos: Vec3;
+    dir: Vec3;
+    color: Vec3;
+    coneHalf: number;
+    softness: number;
+    gain: number;
+    radius: number;
+  };
   albedo: Vec3;
   ambient: Vec3;
   roughness: number;
-  haze: { density: number; g: number; depth: number; ext: Vec3; noise: number; noiseScale: number };
+  haze: { density: number; g: number; depth: number; noise: number; noiseScale: number };
   rays: { amount: number; count: number };
+  /** Надпись — поверхность на стене, освещённая той же лампой. */
+  text: { content: string; size: number; glow: number };
   time: number;
   bloom: { intensity: number; threshold: number; radius: number };
   exposure: number;
@@ -152,15 +162,14 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const gain = Math.pow(2, (dark ? 3.55 : 3.1) + profile.ev + look.brightness * 1.6);
 
   const saturation = profile.saturation;
-  const wall = dark ? brand.wall : LIGHT_ROOM.wall;
+  const wall = dark ? DARK_WALL : LIGHT_ROOM.wall;
   const albedo = linear(wall);
   const ambient: Vec3 = dark ? [0, 0, 0] : solveAmbient(LIGHT_ROOM.floor, wall, saturation);
 
-  // Цвет среды: свет, прошедший сквозь неё, уходит в её цвет. Белая — не красит.
-  const medium = linear(brand.medium);
-  const mMax = Math.max(...medium, 1e-4);
-  const tint = dark ? 0.9 : 1.2;
-  const ext = medium.map((v) => 1 + tint * (1 - v / mMax)) as Vec3;
+  // Цвет света бренда, нормированный по яркости: окраска не меняет экспозицию.
+  // С примесью белого: акцент читается в спаде, а ядро остаётся светом, а не краской.
+  const tint = linear(brand.light).map((v) => 0.3 + 0.7 * v);
+  const lightColor = tint.map((v) => v / Math.max(luma(tint), 1e-4)) as Vec3;
 
   const floorLuma = luma(albedo.map((a, i) => a * ambient[i]));
 
@@ -168,6 +177,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     light: {
       pos,
       dir,
+      color: lightColor,
       coneHalf: coneDeg * DEG,
       softness: 0.35 + look.softness * 0.65,
       gain,
@@ -180,11 +190,11 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       density: (0.03 + look.haze * 0.24) * profile.haze,
       g: 0.5,
       depth: 2.4,
-      ext,
       noise: 0.18 + look.rays * 0.15,
       noiseScale: 1.7,
     },
     rays: { amount: look.rays, count: look.rayCount },
+    text: { content: look.text.trim(), size: look.textSize, glow: dark ? look.textGlow : 0 },
     time: opts.time ?? 0,
     bloom: {
       intensity: profile.bloom,

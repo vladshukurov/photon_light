@@ -11,8 +11,8 @@ precision highp float;
     light — прямой свет лампы на стене;
     air   — свет, рассеянный дымкой в камеру.
 
-  Цвет бренда не красит лампу. Он входит через стену (альбедо) и через среду
-  (ослабление по каналам — свет по пути уходит в её цвет).
+  У основного VK свет белый. У сабрендов он окрашен в светлый акцент гайда;
+  ядро выжигает экспозиция, и цвет живёт в спаде и в дымке.
 
   Выход — линейный HDR. Экспозиция, bloom, ACES и гамма — в composite.frag.
 */
@@ -35,6 +35,7 @@ uniform float uTime;
 
 uniform vec3  uLightPos;
 uniform vec3  uLightDir;
+uniform vec3  uLightColor;     // цвет света бренда, линейный, нормирован по яркости
 uniform float uLightGain;
 uniform float uLightRadius;
 uniform float uConeHalf;
@@ -49,7 +50,6 @@ uniform float uHazeDensity;
 uniform float uHazeG;
 uniform float uHazeDepth;
 uniform int   uHazeSteps;
-uniform vec3  uMediumExt;     // (1,1,1) — серая среда
 uniform float uNoiseAmount;
 uniform float uNoiseScale;
 
@@ -57,6 +57,12 @@ uniform float uRays;          // 0 — сплошной луч, 1 — выраж
 uniform float uRayCount;
 
 uniform float uVignette;
+
+// --- надпись -------------------------------------------------------------
+uniform int       uTextOn;
+uniform sampler2D uText;      // белые буквы на прозрачном, с mip-уровнями
+uniform vec2      uTextTexel;
+uniform float     uTextGlow;  // собственное свечение букв
 
 // --- шум ---------------------------------------------------------------
 
@@ -144,7 +150,7 @@ vec3 spotLight(vec3 X, out vec3 L, out float dist) {
   float profile = exp(-0.693147 * pow(max(theta / w, 1e-4), 2.0 * n));
 
   float rays = rayMask(atan(across, max(tz, 1e-3)) / max(uConeHalf, 1e-3), dist);
-  return vec3(uLightGain * atten * profile * rays);
+  return uLightColor * (uLightGain * atten * profile * rays);
 }
 
 float hg(float cosA, float g) {
@@ -172,7 +178,7 @@ float density(vec3 X) {
 
 // Ослабление луча по пути от лампы: дальний конец темнеет и уходит в цвет среды.
 vec3 beamTransmittance(float dist) {
-  return exp(-uHazeDensity * 0.45 * uMediumExt * dist);
+  return exp(-vec3(uHazeDensity * 0.45 * dist));
 }
 
 float ggx(float NdotH, float a2) {
@@ -201,11 +207,48 @@ void main() {
 
   vec3 ambient = uAlbedo * uAmbient;
 
+  /*
+    Надпись — выпуклая поверхность на стене, её освещает та же лампа.
+
+    Рельеф берётся из размытых mip-уровней маски: внутри буквы высота 1,
+    к краю спадает. Нормаль по градиенту высоты наклоняет кромки — грань,
+    повёрнутая к лампе, ловит свет вскользь и бликует, обратная уходит в тень.
+    Поэтому буквы светлеют со стороны источника и гаснут с удалением от него
+    по тому же закону, что и стена, а при смене направления свет на них
+    перестраивается сам. Свечение добавляет неоновую «собственную» яркость.
+  */
+  float textMask = 0.0;
+  vec3 textLit = vec3(0.0);
+  if (uTextOn == 1) {
+    textMask = texture(uText, vUv).a;
+    if (textMask > 0.002) {
+      // Высота насыщается внутри буквы: лицо плоское, наклонена только фаска у края.
+      float lod = 2.0;
+      vec2 e = uTextTexel * exp2(lod);
+      float hL = min(1.0, textureLod(uText, vUv - vec2(e.x, 0.0), lod).a * 1.8);
+      float hR = min(1.0, textureLod(uText, vUv + vec2(e.x, 0.0), lod).a * 1.8);
+      float hD = min(1.0, textureLod(uText, vUv - vec2(0.0, e.y), lod).a * 1.8);
+      float hU = min(1.0, textureLod(uText, vUv + vec2(0.0, e.y), lod).a * 1.8);
+      vec3 Nt = normalize(vec3(-(hR - hL) * 2.4, -(hU - hD) * 2.4, 1.0));
+      vec3 Pt = vec3(c, 0.012);
+      vec3 Lt;
+      float dt;
+      vec3 Et = spotLight(Pt, Lt, dt) * beamTransmittance(dt);
+      float NdotLt = max(dot(Nt, Lt), 0.0);
+      vec3 Ht = normalize(Lt + V);
+      float specT = ggx(max(dot(Nt, Ht), 0.0), pow(0.38, 4.0)) * 0.08;
+      vec3 albedoT = vec3(0.85);
+      textLit = (albedoT / PI + specT) * NdotLt * Et;
+      // Собственное свечение: ровное, чуть теплее у источника, гаснет с расстоянием.
+      textLit += uLightColor * uTextGlow * (0.8 + 2.4 / (1.0 + dt * dt * 1.2));
+    }
+  }
+
   // --- дымка -------------------------------------------------------------
   vec3 haze = vec3(0.0);
   vec3 T = vec3(1.0);
   if (uHazeDensity > 0.0001) {
-    vec3 sigma = uHazeDensity * 0.6 * uMediumExt;
+    vec3 sigma = vec3(uHazeDensity * 0.6);
     float span = uHazeDepth;
     float dz = span / float(uHazeSteps);
     // Джиттер сдвигается по кадрам золотым сечением: накопление усредняет марш.
@@ -226,7 +269,7 @@ void main() {
 
         // Пропускание интегрируется аналитически внутри шага — яркость
         // объёма не зависит от числа шагов превью и экспорта.
-        vec3 ls = max(dn * 0.6 * uMediumExt, vec3(1e-6));
+        vec3 ls = vec3(max(dn * 0.6, 1e-6));
         vec3 weight = dn * (1.0 - exp(-ls * dz)) / ls;
         haze += inscatter * weight * exp(-tau);
         tau += ls * dz;
@@ -246,6 +289,9 @@ void main() {
   }
 
   vec3 base = ambient * T + airlight;
+  // Буквы закрывают стену под собой: их освещение заменяет освещение стены.
+  base *= 1.0 - textMask;
+  lit = mix(lit, textLit, textMask);
   lit *= T * vig;
   vec3 air = haze * vig;
 

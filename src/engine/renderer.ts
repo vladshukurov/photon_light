@@ -1,6 +1,7 @@
 import type { Scene } from '../domain/scene';
 import { Program } from './program';
 import { Fbo } from './fbo';
+import { TextTexture } from './text';
 import quadSource from './quad.vert?raw';
 import lightSource from './light.frag?raw';
 import downSource from './bloom_down.frag?raw';
@@ -52,6 +53,7 @@ export class Renderer {
   private readonly vao: WebGLVertexArrayObject | null;
   size: [number, number] = [0, 0];
   private pScene!: Program;
+  private text!: TextTexture;
   private pDown!: Program;
   private pUp!: Program;
   private pComposite!: Program;
@@ -99,6 +101,7 @@ export class Renderer {
     ];
     const gl = this.gl;
     this.pScene = new Program(gl, vert, scene, 'light');
+    this.text = new TextTexture(gl);
     this.pDown = new Program(gl, vert, down, 'bloom_down');
     this.pUp = new Program(gl, vert, up, 'bloom_up');
     this.pComposite = new Program(gl, vert, composite, 'composite');
@@ -167,6 +170,7 @@ export class Renderer {
   ) {
     const gl = this.gl;
     const { light, haze } = p;
+    const hasText = this.text.update(p.text.content, p.text.size, w, h);
     this.scene.bind();
     this.pScene
       .use()
@@ -176,6 +180,7 @@ export class Renderer {
       .float('uTime', opts.time ?? p.time)
       .vec3('uLightPos', ...light.pos)
       .vec3('uLightDir', ...light.dir)
+      .vec3('uLightColor', ...light.color)
       .float('uLightGain', light.gain)
       .float('uLightRadius', light.radius)
       .float('uConeHalf', light.coneHalf)
@@ -187,12 +192,15 @@ export class Renderer {
       .float('uHazeG', haze.g)
       .float('uHazeDepth', haze.depth)
       .int('uHazeSteps', hazeSteps)
-      .vec3('uMediumExt', ...haze.ext)
       .float('uNoiseAmount', haze.noise)
       .float('uNoiseScale', haze.noiseScale)
       .float('uRays', p.rays.amount)
       .float('uRayCount', p.rays.count)
-      .float('uVignette', p.vignette);
+      .float('uVignette', p.vignette)
+      .int('uTextOn', hasText ? 1 : 0)
+      .texture('uText', this.text.tex)
+      .vec2('uTextTexel', 1 / w, 1 / h)
+      .float('uTextGlow', p.text.glow);
     gl.disable(gl.BLEND);
     this.draw();
   }
@@ -339,6 +347,7 @@ export class Renderer {
 
   dispose() {
     for (const p of [this.pScene, this.pDown, this.pUp, this.pComposite, this.pAccum]) p?.dispose();
+    this.text?.dispose();
     for (const f of [this.scene, ...(this.hist || []), ...(this.pre || []), ...(this.mips || [])])
       f?.dispose();
     this.gl.deleteVertexArray(this.vao);

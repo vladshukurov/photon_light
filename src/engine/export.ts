@@ -84,12 +84,25 @@ export function download(blob: Blob, filename: string) {
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+export interface Layer {
+  id: 'background' | 'light' | 'volume';
+  name: string;
+  /** Режим наложения в Figma. */
+  blend: 'Normal' | 'Plus lighter';
+  blob: Blob;
+}
+
+/**
+ * Три слоя под Figma: фон снизу, свет и объём сверху в режиме Plus lighter.
+ * Слои — разности 8-битных кадров после тонмапа, поэтому их сумма в sRGB
+ * повторяет цельный кадр с точностью до единицы. Где разность отрицательна
+ * (bloom объёма гасит свет под ним), сложение неточно — об этом флаг clipped.
+ */
 export async function exportLayers(
   renderer: Renderer,
   scene: Scene,
   width: number,
   height: number,
-  name: string,
 ) {
   const p = { ...scene, grain: 0 };
   const base = renderPixels(renderer, p, width, height, { mode: 'base' });
@@ -100,36 +113,47 @@ export async function exportLayers(
     const bytes = new Uint8Array(a.length);
     for (let i = 0; i < bytes.length; i += 4) {
       for (let c = 0; c < 3; c++) {
-        if (a[i + c] < b[i + c]) clipped = true;
+        if (a[i + c] + 1 < b[i + c]) clipped = true;
         bytes[i + c] = Math.max(0, a[i + c] - b[i + c]);
       }
       bytes[i + 3] = 255;
     }
     return bytes;
   };
-  const light = diff(stack, base),
-    haze = diff(full, stack);
-  // One archive avoids browser restrictions on multiple automatic downloads.
+  const png = (px: Uint8Array) => canvasBlob(pixelsToCanvas(px, width, height));
+  const layers: Layer[] = [
+    { id: 'background', name: 'Фон', blend: 'Normal', blob: await png(base) },
+    { id: 'light', name: 'Свет', blend: 'Plus lighter', blob: await png(diff(stack, base)) },
+    { id: 'volume', name: 'Объём', blend: 'Plus lighter', blob: await png(diff(full, stack)) },
+  ];
+  return { layers, clipped };
+}
+
+/** Все слои одним архивом — на случай, если нужны файлы, а не буфер обмена. */
+export async function downloadLayersZip(layers: Layer[], name: string) {
   const { zipSync } = await import('fflate');
   const entries: Record<string, Uint8Array> = {};
-  for (const [label, px] of [
-    ['01-background', base],
-    ['02-light', light],
-    ['03-volume', haze],
-  ] as const) {
-    const blob = await canvasBlob(pixelsToCanvas(px, width, height));
-    entries[`${label}.png`] = new Uint8Array(await blob.arrayBuffer());
-  }
+  for (const [i, l] of layers.entries())
+    entries[`0${i + 1}-${l.id}.png`] = new Uint8Array(await l.blob.arrayBuffer());
   entries['README.txt'] = new TextEncoder().encode(
-    'Фотон — слои для Figma.\n\n01-background — нижний слой, режим Normal.\n02-light и 03-volume — сверху, режим Plus lighter.\n\nСлои — приближение 8-битной композиции, цельный PNG точнее.\n' +
-      (clipped
-        ? 'В сцене есть отрицательная разность: сложение слоёв не воспроизводит её точно.'
-        : ''),
+    'Фотон — слои для Figma.\n\n' +
+      layers.map((l, i) => `0${i + 1}-${l.id}.png — ${l.name}, режим ${l.blend}`).join('\n') +
+      '\n\nПорядок снизу вверх. Цельный PNG точнее, слои — для правок в макете.\n',
   );
   const zip = zipSync(entries, { level: 0 });
-  download(new Blob([new Uint8Array(zip)], { type: 'application/zip' }), `${name}-layers.zip`);
-  return clipped;
+  download(new Blob([new Uint8Array(zip)], { type: 'application/zip' }), `${name} — слои.zip`);
 }
+
+/**
+ * Кладёт PNG в буфер обмена: в Figma он вставляется по ⌘V. Принимает промис,
+ * чтобы запись началась ещё в обработчике клика — иначе браузер не даст доступ.
+ */
+export async function copyPng(blob: Blob | Promise<Blob>) {
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write)
+    throw new Error('Браузер не даёт копировать картинки — скачайте PNG.');
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+}
+
 export function videoType(): { mime: string; ext: 'mp4' | 'webm' } | null {
   if (
     typeof MediaRecorder === 'undefined' ||

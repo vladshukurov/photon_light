@@ -37,6 +37,12 @@ export interface Look {
   rayCount: number;
   haze: number;
   grain: number;
+  /** Надпись в сцене; пустая строка — надписи нет. */
+  text: string;
+  /** Высота строки в долях короткой стороны кадра. */
+  textSize: number;
+  /** Собственное свечение букв поверх освещения. */
+  textGlow: number;
   motion: Motion;
 }
 
@@ -73,6 +79,8 @@ export const RANGES = {
   rayCount: { min: 3, max: 16, def: 7 },
   haze: { min: 0, max: 1, def: 0.5 },
   grain: { min: 0, max: 1, def: 0.4 },
+  textSize: { min: 0.05, max: 0.4, def: 0.14 },
+  textGlow: { min: 0, max: 1, def: 0.6 },
 } satisfies Record<string, Range>;
 export type NumericKey = keyof typeof RANGES;
 
@@ -92,6 +100,9 @@ export const DEFAULT_LOOK: Look = {
   rayCount: 7,
   haze: 0.5,
   grain: 0.4,
+  text: '',
+  textSize: 0.14,
+  textGlow: 0.6,
   motion: { enabled: false, toAngle: 45, duration: 8 },
 };
 
@@ -126,6 +137,7 @@ export function normalizeLook(raw: unknown): Look {
   if (typeof src.name === 'string' && src.name.trim()) look.name = src.name.trim().slice(0, 80);
   if (isBrand(src.brand)) look.brand = src.brand;
   if (src.room === 'dark' || src.room === 'light') look.room = src.room;
+  if (typeof src.text === 'string') look.text = src.text.slice(0, 120);
   // Файлы с переключателем «характер» (до ползунка): vivid — это выразительность 100%.
   if (src.character === 'vivid') look.expression = 1;
   for (const key of Object.keys(RANGES) as NumericKey[]) {

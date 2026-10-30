@@ -1,11 +1,28 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowDownToLine, Check, Film, Image, Layers, LoaderCircle, Square } from 'lucide-react';
+import {
+  ArrowDownToLine,
+  Check,
+  Copy,
+  Film,
+  Image,
+  Layers,
+  LoaderCircle,
+  Square,
+} from 'lucide-react';
 import { Modal } from './Modal';
 import { Segmented } from './controls';
 import { LiveThumb } from './LiveThumb';
 import type { PreviewHandle } from './Preview';
 import type { Look } from '../domain/look';
-import { download, exportVideo, MAX_DIMENSION, videoType } from '../engine/export';
+import {
+  copyPng,
+  download,
+  downloadLayersZip,
+  exportVideo,
+  MAX_DIMENSION,
+  videoType,
+  type Layer,
+} from '../engine/export';
 
 type Kind = 'image' | 'video' | 'layers';
 type Preset = { id: string; label: string; width: number; height: number };
@@ -54,6 +71,8 @@ export function ExportDialog({
     [progress, setProgress] = useState(0),
     [done, setDone] = useState(''),
     [error, setError] = useState('');
+  // Готовые слои: показываются списком, каждый можно скопировать или скачать.
+  const [layers, setLayers] = useState<(Layer & { url: string })[] | null>(null);
   const abort = useRef<AbortController | null>(null);
   const surface = useRef<HTMLDivElement>(null);
 
@@ -66,6 +85,11 @@ export function ExportDialog({
     (kind !== 'video' || width * height <= 1920 * 1080);
 
   useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => () => layers?.forEach((l) => URL.revokeObjectURL(l.url)), [layers]);
+  // Слои собраны под конкретный размер и кадр — при смене они устаревают.
+  const layersKey = `${width}×${height}:${JSON.stringify(look)}`;
+  const [layersFor, setLayersFor] = useState('');
+  const shownLayers = layersFor === layersKey ? layers : null;
   useEffect(() => {
     const hidden = () => {
       if (document.hidden) abort.current?.abort();
@@ -107,10 +131,10 @@ export function ExportDialog({
         setDone(`Видео ${result.ext.toUpperCase()} скачано`);
       } else if (kind === 'layers') {
         if (!preview.current) throw new Error('Сцена ещё не готова.');
-        const clipped = await preview.current.layers(width, height);
-        setDone(
-          clipped ? 'Архив скачан, сложение слоёв приблизительное' : 'Архив со слоями скачан',
-        );
+        const result = await preview.current.layers(width, height);
+        setLayers(result.layers.map((l) => ({ ...l, url: URL.createObjectURL(l.blob) })));
+        setLayersFor(layersKey);
+        if (result.clipped) setDone('Слои готовы. В этой сцене сложение слоёв приблизительное');
       } else {
         if (!preview.current) throw new Error('Сцена ещё не готова.');
         const blob = await preview.current.image(format, width, height);
@@ -131,17 +155,35 @@ export function ExportDialog({
     }
   };
 
+  const copy = async (blob: Blob | Promise<Blob>, what: string) => {
+    setError('');
+    setDone('');
+    try {
+      await copyPng(blob);
+      setDone(`${what} в буфере — вставьте в Figma через ⌘V`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось скопировать.');
+    }
+  };
+  const copyImage = () => {
+    if (!preview.current || !valid) return;
+    setBusy(true);
+    // Промис отдаётся буферу сразу, пока клик ещё «свежий».
+    const blob = preview.current.image('png', width, height);
+    void copy(blob, 'Картинка').finally(() => setBusy(false));
+  };
+
   const fileLabel =
     kind === 'video'
       ? (video?.ext ?? 'mp4').toUpperCase()
       : kind === 'layers'
-        ? 'ZIP · 3 PNG'
+        ? '3 слоя PNG'
         : format.toUpperCase();
   const action =
     kind === 'video'
       ? 'Записать видео'
       : kind === 'layers'
-        ? 'Скачать слои'
+        ? 'Собрать слои'
         : `Скачать ${fileLabel}`;
   const ratio = valid ? width / height : look.width / look.height;
   const thumbW = ratio >= 1 ? 360 : Math.round(360 * ratio);
@@ -274,7 +316,7 @@ export function ExportDialog({
               {kind === 'video'
                 ? `Свет стоит на месте, дымка и лучи живут. Запись идёт в реальном времени — не сворачивайте вкладку.${video?.ext === 'webm' ? ' Браузер пишет только WebM.' : ''}`
                 : kind === 'layers'
-                  ? 'Фон — нижний слой, свет и объём — сверху в режиме Plus lighter.'
+                  ? 'Фон кладите снизу, свет и объём — сверху с режимом Plus lighter. Слой можно скопировать и вставить в Figma через ⌘V.'
                   : 'Отдельный проход в полном разрешении, а не снимок превью.'}
             </p>
           </fieldset>
@@ -301,17 +343,76 @@ export function ExportDialog({
             </p>
           )}
 
-          {busy && kind === 'video' ? (
-            <button className="button wide" onClick={() => abort.current?.abort()}>
-              <Square size={12} fill="currentColor" />
-              Остановить запись
-            </button>
-          ) : (
-            <button className="button primary wide" disabled={busy || !valid} onClick={run}>
-              {busy ? <LoaderCircle size={15} className="spin" /> : <ArrowDownToLine size={15} />}
-              {busy ? 'Готовим файл…' : action}
-            </button>
+          {kind === 'layers' && shownLayers && (
+            <ul className="layer-list" aria-label="Слои">
+              {shownLayers.map((l) => (
+                <li key={l.id}>
+                  <img src={l.url} alt="" style={{ aspectRatio: `${width} / ${height}` }} />
+                  <span className="layer-name">
+                    <strong>{l.name}</strong>
+                    <small>{l.blend}</small>
+                  </span>
+                  <button
+                    className="icon-button"
+                    aria-label={`Скопировать слой «${l.name}»`}
+                    title="Скопировать — вставить в Figma через ⌘V"
+                    onClick={() => void copy(l.blob, `Слой «${l.name}»`)}
+                  >
+                    <Copy size={15} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={`Скачать слой «${l.name}»`}
+                    title="Скачать PNG"
+                    onClick={() => download(l.blob, `${look.name} — ${l.name}.png`)}
+                  >
+                    <ArrowDownToLine size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
+
+          <div className="export-actions">
+            {busy && kind === 'video' ? (
+              <button className="button wide" onClick={() => abort.current?.abort()}>
+                <Square size={12} fill="currentColor" />
+                Остановить запись
+              </button>
+            ) : kind === 'layers' && shownLayers ? (
+              <button
+                className="button wide"
+                onClick={() => void downloadLayersZip(shownLayers, look.name)}
+              >
+                <ArrowDownToLine size={15} />
+                Скачать все одним ZIP
+              </button>
+            ) : (
+              <>
+                {kind === 'image' && (
+                  <button
+                    className="button wide"
+                    disabled={busy || !valid}
+                    title="Скопировать PNG — вставить в Figma через ⌘V"
+                    onClick={copyImage}
+                  >
+                    <Copy size={15} />
+                    Скопировать
+                  </button>
+                )}
+                <button className="button primary wide" disabled={busy || !valid} onClick={run}>
+                  {busy ? (
+                    <LoaderCircle size={15} className="spin" />
+                  ) : kind === 'layers' ? (
+                    <Layers size={15} />
+                  ) : (
+                    <ArrowDownToLine size={15} />
+                  )}
+                  {busy ? 'Готовим…' : action}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </Modal>

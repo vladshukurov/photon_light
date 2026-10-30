@@ -15,6 +15,7 @@ interface Spec {
   looks: (Partial<Look> & { progress?: number; time?: number })[];
 }
 
+await document.fonts.load('600 32px "VK Sans Display Condensed"');
 const spec: Spec = JSON.parse(decodeURIComponent(location.hash.slice(1)));
 const [w, h] = spec.cell;
 const refs = spec.refs ?? [];

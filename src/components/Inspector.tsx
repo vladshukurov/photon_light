@@ -192,6 +192,33 @@ export function Inspector({
             {look.rays > 0 && slider('rayCount', 'Сколько лучей', (v) => String(Math.round(v)))}
           </div>
         </Card>
+        <Card
+          title="Надпись"
+          action={
+            look.text ? (
+              <button className="ghost-button" onClick={() => onChange({ text: '' })}>
+                Убрать
+              </button>
+            ) : undefined
+          }
+        >
+          <textarea
+            className="text-input"
+            aria-label="Текст надписи"
+            placeholder="Текст, на который падает свет"
+            rows={2}
+            maxLength={120}
+            spellCheck={false}
+            value={look.text}
+            onChange={(e) => onChange({ text: e.target.value }, 'text')}
+          />
+          {look.text.trim() && (
+            <div className="slider-stack">
+              {slider('textSize', 'Размер')}
+              {slider('textGlow', 'Свечение')}
+            </div>
+          )}
+        </Card>
       </aside>
     </>
   );

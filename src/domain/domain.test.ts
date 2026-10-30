@@ -116,12 +116,14 @@ describe('one light rig', () => {
     }
   });
 
-  it('keeps the photon white: brand changes wall and medium only', () => {
+  it('VK light is white; sub-brands tint only the light colour', () => {
     const vk = buildScene(look({ brand: 'vk' }), 1);
     const music = buildScene(look({ brand: 'music' }), 1);
-    expect(music.light).toEqual(vk.light);
-    expect(music.albedo).not.toEqual(vk.albedo);
-    expect(music.haze.ext).not.toEqual(vk.haze.ext);
+    expect(vk.light.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
+    expect(music.light.color).not.toEqual(vk.light.color);
+    expect({ ...music.light, color: null }).toEqual({ ...vk.light, color: null });
+    expect(music.albedo).toEqual(vk.albedo);
+    expect(Math.max(...vk.albedo) - Math.min(...vk.albedo)).toBeLessThan(0.002);
   });
 
   it('switching room keeps the light placement', () => {
@@ -129,6 +131,21 @@ describe('one light rig', () => {
     const light = buildScene(look({ room: 'light', angle: 120 }), 16 / 9);
     expect(light.light.pos).toEqual(dark.light.pos);
     expect(light.light.dir).toEqual(dark.light.dir);
+  });
+});
+
+describe('text', () => {
+  it('keeps text in the look and trims it into the scene', () => {
+    const l = normalizeLook({ text: '  VK CONF  ', textSize: 9 });
+    expect(l.text).toBe('  VK CONF  ');
+    expect(l.textSize).toBe(0.4);
+    expect(buildScene(l, 1).text.content).toBe('VK CONF');
+    expect(normalizeLook({ text: 42 }).text).toBe('');
+  });
+
+  it('glows only in the dark room', () => {
+    expect(buildScene(look({ text: 'A', room: 'light' }), 1).text.glow).toBe(0);
+    expect(buildScene(look({ text: 'A' }), 1).text.glow).toBeGreaterThan(0);
   });
 });
 
@@ -189,8 +206,8 @@ describe('tone', () => {
     expect(luma(trimInverse(c, 1.6))).toBeCloseTo(luma(c), 6);
   });
 
-  it('every brand defines all environment colours', () => {
-    for (const b of BRANDS) for (const c of [b.wall, b.medium]) expect(c).toMatch(/^#[0-9A-F]{6}$/);
+  it('every brand light is a valid colour', () => {
+    for (const b of BRANDS) for (const c of [b.light]) expect(c).toMatch(/^#[0-9A-F]{6}$/);
   });
 });
 

@@ -108,6 +108,11 @@ test('drags the light on the canvas', async ({ page }) => {
   expect(angle).toBeGreaterThan(20);
 
   await expect(page.locator('.canvas-state')).toHaveCount(0);
+
+  await page.getByRole('textbox', { name: 'Текст надписи' }).fill('VK CONF 2026');
+  await expect(page.getByRole('slider', { name: 'Свечение' })).toBeVisible();
+  await page.getByRole('button', { name: 'Убрать' }).click();
+  await expect(page.getByRole('textbox', { name: 'Текст надписи' })).toHaveValue('');
 });
 
 test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ page }) => {
@@ -133,8 +138,16 @@ test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ 
 
   await dialog.getByRole('button', { name: 'Слои', exact: true }).click();
   await customSize(dialog, 320, 180);
+  await dialog.getByRole('button', { name: 'Собрать слои', exact: true }).click();
+  const list = dialog.getByRole('list', { name: 'Слои' });
+  await expect(list.getByRole('listitem')).toHaveCount(3, { timeout: 30_000 });
+  await expect(list).toContainText('Plus lighter');
   downloadPromise = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'Скачать слои', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Скачать слой «Свет»' }).click();
+  const layerBytes = await readFile((await (await downloadPromise).path())!);
+  expect(layerBytes.readUInt32BE(16)).toBe(320);
+  downloadPromise = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Скачать все одним ZIP' }).click();
   const { unzipSync } = await import('fflate');
   const files = unzipSync(new Uint8Array(await readFile((await (await downloadPromise).path())!)));
   expect(Object.keys(files)).toEqual([
