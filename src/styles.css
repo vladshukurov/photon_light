@@ -102,7 +102,7 @@ button:disabled {
   height: 100dvh;
   overflow: hidden;
   /* Доска заметно светлее чёрного кадра: край холста читается без рамки. */
-  background: #151515;
+  background: #0c0c0c;
 }
 
 .glass {
