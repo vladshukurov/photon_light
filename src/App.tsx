@@ -122,9 +122,13 @@ export default function App() {
             }}
           />
           <span
-            className={`save-dot${saved ? '' : ' off'}`}
-            title={saved ? 'Сохранено в браузере' : 'Автосохранение недоступно — сохраните JSON'}
-          />
+            className={`save-state${saved ? '' : ' off'}`}
+            title={
+              saved ? 'Сцена хранится в этом браузере' : 'Сохраните JSON, чтобы не потерять сцену'
+            }
+          >
+            {saved ? 'Сохранено' : 'Не сохраняется'}
+          </span>
         </div>
         <div className="topbar-end">
           <div className="glass pill toolbar">

@@ -10,11 +10,11 @@ import { LiveThumb } from './LiveThumb';
 */
 
 const BOX = 220;
-const PAD = 40;
+const PAD = 30;
 // Миниатюра не в масштабе: источник рисуется у края кадра с отступом в
 // пикселях, иначе при настоящем расстоянии кадр в панели стал бы крошечным.
-const OUT_PX = 16,
-  OUT_PER_DISTANCE = 18;
+const OUT_PX = 13,
+  OUT_PER_DISTANCE = 14;
 
 export function DirectionPad({
   look,
@@ -25,9 +25,9 @@ export function DirectionPad({
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const aspect = look.width / look.height;
-  // Кадр вписан в 140 × 92: вертикальные форматы не раздувают панель по высоте.
+  // Кадр вписан в 160 × 76: вертикальные форматы не раздувают панель по высоте.
   const fitW = BOX - PAD * 2,
-    fitH = 92;
+    fitH = 76;
   const fw = aspect >= fitW / fitH ? fitW : fitH * aspect;
   const fh = fw / aspect;
   // Высота поля постоянная: смена формата не двигает панель.

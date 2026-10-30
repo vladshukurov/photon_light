@@ -27,7 +27,7 @@
   --panel-w: 300px;
   --control-h: 44px;
   --bg: #050505;
-  --glass: rgba(24, 24, 24, 0.6);
+  --glass: rgba(32, 32, 32, 0.66);
   --glass-strong: rgba(20, 20, 20, 0.88);
   --glass-rim: 0 0 0 0 transparent;
   --float: 0 18px 50px -18px rgba(0, 0, 0, 0.75);
@@ -101,7 +101,8 @@ button:disabled {
   position: relative;
   height: 100dvh;
   overflow: hidden;
-  background: linear-gradient(180deg, #0b0b0b 0%, #050505 100%);
+  /* Доска заметно светлее чёрного кадра: край холста читается без рамки. */
+  background: #151515;
 }
 
 .glass {
@@ -177,17 +178,27 @@ button:disabled {
   color: var(--text);
   background: rgba(0, 0, 0, 0.3);
 }
-.save-dot {
+.save-state {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.save-state::before {
+  content: '';
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--ok);
-  box-shadow: 0 0 8px var(--ok);
 }
-.save-dot.off {
+.save-state.off {
+  color: var(--danger);
+}
+.save-state.off::before {
   background: var(--danger);
-  box-shadow: none;
 }
 .button.export-button {
   height: var(--control-h);
@@ -304,7 +315,9 @@ button:disabled {
   overflow: hidden;
   border-radius: 6px;
   background: #000;
-  box-shadow: 0 50px 120px -30px rgba(0, 0, 0, 0.95);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.5),
+    0 40px 90px -20px rgba(0, 0, 0, 0.85);
 }
 .canvas-wrap canvas {
   display: block;
@@ -422,9 +435,9 @@ button:disabled {
 .card {
   flex: none;
   display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 20px;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
   background: var(--glass);
   box-shadow: var(--glass-rim), var(--float);
   backdrop-filter: var(--blur);
@@ -434,13 +447,14 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 26px;
-  padding-left: 2px;
+  min-height: 22px;
+  padding: 0 2px;
 }
 .card h2 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
 }
 .card-meta {
   color: var(--text-2);
@@ -554,7 +568,7 @@ button:disabled {
 .brand-thumb {
   display: block;
   width: 100%;
-  aspect-ratio: 232 / 144;
+  aspect-ratio: 232 / 120;
 }
 .brand-card span {
   position: absolute;
@@ -654,9 +668,9 @@ button:disabled {
 }
 .slider {
   --t: 0;
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
 }
 .slider.disabled {
   opacity: 0.35;
@@ -668,7 +682,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   height: 36px;
-  padding: 0 12px;
+  padding: 0 28px 0 12px;
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.045);
   overflow: hidden;
@@ -677,11 +691,20 @@ button:disabled {
   touch-action: none;
   transition: background 0.15s;
 }
+.segmented button:focus-visible,
+.chip:focus-visible,
+.brand-card:focus-visible,
+.icon-button:focus-visible,
+.text-input:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.12);
+}
 .slider-pill:hover {
   background: rgba(255, 255, 255, 0.07);
 }
 .slider-pill:focus-visible {
-  outline-offset: 0;
+  outline: none;
+  background: rgba(255, 255, 255, 0.11);
 }
 .slider-fill {
   position: absolute;
@@ -725,17 +748,23 @@ button:disabled {
 .slider.changed .slider-label {
   color: var(--text);
 }
+/* Точка сброса — внутри ползунка справа, края всех контролов совпадают. */
 .slider-reset {
-  flex: none;
-  width: 14px;
-  height: 14px;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
   border-radius: 50%;
-  position: relative;
+}
+.slider-reset:disabled {
+  pointer-events: none;
 }
 .slider-reset::after {
   content: '';
   position: absolute;
-  inset: 4px;
+  inset: 6px;
   border-radius: 50%;
   background: transparent;
   transition:
@@ -1221,7 +1250,7 @@ kbd {
 }
 @media (max-width: 560px) {
   .name-input,
-  .save-dot {
+  .save-state {
     display: none;
   }
   .toolbar .icon-button {
