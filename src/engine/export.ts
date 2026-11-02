@@ -46,12 +46,12 @@ export function renderPixels(
     renderer.size = [0, 0];
   }
 }
-export const canvasBlob = (canvas: HTMLCanvasElement, type = 'image/png') =>
+export const canvasBlob = (canvas: HTMLCanvasElement, type = 'image/png', quality = 0.95) =>
   new Promise<Blob>((resolve, reject) =>
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Не удалось закодировать изображение.'))),
       type,
-      0.95,
+      quality,
     ),
   );
 export async function exportImage(
@@ -60,19 +60,19 @@ export async function exportImage(
   width: number,
   height: number,
   format: 'png' | 'jpg',
+  quality = 0.95,
 ) {
   return canvasBlob(
     pixelsToCanvas(renderPixels(renderer, scene, width, height), width, height),
     format === 'png' ? 'image/png' : 'image/jpeg',
+    quality,
   );
 }
 export function safeFilename(name: string) {
-  return (
-    name
-      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
-      .trim()
-      .slice(0, 80) || 'photon'
-  );
+  const clean = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+  const extension = clean.match(/\.(?:png|jpe?g|json|zip|mp4|webm)$/i)?.[0] ?? '';
+  const stem = extension ? clean.slice(0, -extension.length) : clean;
+  return (stem.trim().slice(0, 80) || 'photon') + extension;
 }
 export function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob),
@@ -126,19 +126,22 @@ export async function exportLayers(
     { id: 'light', name: 'Свет', blend: 'Plus lighter', blob: await png(diff(stack, base)) },
     { id: 'volume', name: 'Объём', blend: 'Plus lighter', blob: await png(diff(full, stack)) },
   ];
-  return { layers, clipped };
+  const composite =
+    scene.grain === 0 ? await png(full) : await exportImage(renderer, scene, width, height, 'png');
+  return { layers, clipped, composite };
 }
 
 /** Все слои одним архивом — на случай, если нужны файлы, а не буфер обмена. */
-export async function downloadLayersZip(layers: Layer[], name: string) {
+export async function downloadLayersZip(layers: Layer[], name: string, composite: Blob) {
   const { zipSync } = await import('fflate');
   const entries: Record<string, Uint8Array> = {};
+  entries['00-composite.png'] = new Uint8Array(await composite.arrayBuffer());
   for (const [i, l] of layers.entries())
     entries[`0${i + 1}-${l.id}.png`] = new Uint8Array(await l.blob.arrayBuffer());
   entries['README.txt'] = new TextEncoder().encode(
-    'Фотон — слои для Figma.\n\n' +
+    'Фотон — слои для Figma.\n\n00-composite.png — точный цельный кадр с зерном, для сравнения и готового макета.\n\n' +
       layers.map((l, i) => `0${i + 1}-${l.id}.png — ${l.name}, режим ${l.blend}`).join('\n') +
-      '\n\nПорядок снизу вверх. Цельный PNG точнее, слои — для правок в макете.\n',
+      '\n\nПорядок снизу вверх. Слои непрозрачные, на чёрном фоне; режимы наложения обязательны. В слоях нет зерна; сложение может отличаться от цельного кадра.\n',
   );
   const zip = zipSync(entries, { level: 0 });
   download(new Blob([new Uint8Array(zip)], { type: 'application/zip' }), `${name} — слои.zip`);

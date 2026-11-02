@@ -64,8 +64,8 @@ interface Profile {
 */
 const PROFILES: Record<Look['room'], [guide: Profile, vivid: Profile]> = {
   dark: [
-    { ev: -0.8, cone: 1, haze: 1, bloom: 0.14, threshold: 0.22, saturation: 1.5 },
-    { ev: 0.05, cone: 3, haze: 1.5, bloom: 0.4, threshold: 0.18, saturation: 1.7 },
+    { ev: -0.8, cone: 1, haze: 1.35, bloom: 0.14, threshold: 0.22, saturation: 1.5 },
+    { ev: 0.05, cone: 3, haze: 2.025, bloom: 0.4, threshold: 0.18, saturation: 1.7 },
   ],
   light: [
     { ev: 2.0, cone: 1, haze: 0.8, bloom: 0.2, threshold: 0, saturation: 1 },
@@ -99,17 +99,17 @@ const RIG = {
   /** Размер излучателя: чем больше, тем мягче заход света у края. */
   radius: 0.08,
   /** Затухание по пути: свет — компактное свечение у края, а не заливка кадра. */
-  decay: 0.5,
-  ev: 3.55,
+  decay: 0.45,
+  ev: 3.7,
   evLight: 3.1,
   /** Сколько цвета бренда в самой лампе: ядро остаётся почти белым. */
   keyTint: 0.4,
-  /** Без отлива лампа ярче — так на ч/б рефе: свет не уходит в цветную стену. */
-  monoEv: 1.2,
+  /** Базовая яркость VK — общая для ч/б и синей версии. */
+  vkEv: 1.2,
   /**
    * Ореол луча: широкий мягкий свет по той же оси с центром во входе луча —
    * как большие размытые клинья в макете. В цветных версиях это отлив цветной
-   * стены и он заметный (gain), в ч/б — слабый белый (monoGain).
+   * стены. Для VK сила регулируется diffusion от baseGain до gain.
    */
   bounce: {
     out: 0.8,
@@ -118,7 +118,7 @@ const RIG = {
     radius: 0.2,
     cone: 16,
     gain: 0.5,
-    monoGain: 0.015,
+    baseGain: 0.015,
     decay: 0.3,
   },
 };
@@ -142,10 +142,10 @@ export function frameHalf(aspect: number): [number, number] {
 
 /*
   Точка на краю кадра в направлении угла. Диагональ сжата по горизонтали
-  (DIAG): угловые направления гайда стоят на верхнем/нижнем крае, а не в
-  самом углу — заход света на эталонах в пятой части ширины от угла.
+  (DIAG): угловые направления стоят на верхнем/нижнем крае, а не в самом
+  углу — заход света примерно в трети ширины, как в баннере 16719:174708.
 */
-const DIAG = 0.55;
+const DIAG = 0.36;
 
 export function edgePoint(angleDeg: number, aspect: number): [number, number] {
   const a = angleDeg * DEG;
@@ -168,16 +168,16 @@ export function sourceOnFrame(
 }
 
 /** Насколько источник по умолчанию стоит за краем кадра (в коротких сторонах). */
-const OUT = 0.5;
+const OUT = 0.55;
 /** Наклон оси луча к центру кадра: 0 — строго по нормали к краю, 1 — к центру. */
-const TILT = 0.65;
+const TILT = 0.76;
 
 /*
   Нормаль к краю в точке (ex, ey), с наклоном к центру кадра на долю tilt.
 
-  Источник стоит над точкой на краю строго по нормали: на кадрах гайда угловой
-  свет приходит из-за верхнего края в пятой части от угла, а не из самого
-  угла. Ось луча наклонена к центру — свет падает в кадр круто и чуть внутрь.
+  Источник стоит над точкой на краю по оси с наклоном к центру: в баннере
+  угловой свет приходит из-за верхнего края примерно в трети ширины, а не
+  из самого угла. Ось луча наклонена к центру — свет падает в кадр чуть внутрь.
   Нормаль берётся у скруглённого прямоугольника: на ребре она перпендикулярна
   ему, в углу — диагональ, поэтому при переходе через угол ничего не прыгает.
 */
@@ -274,7 +274,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     normalize([ex - ax * reach - lamp[0], ey - ay * reach - lamp[1], -lamp[2]]);
   const dir = aim(pos, RIG.reach);
 
-  const coneDeg = 4 + look.spread * 12 + profile.cone;
+  const coneDeg = 2.6 + look.spread * 12 + profile.cone;
 
   const saturation = profile.saturation;
   const wall = dark ? DARK_WALL : LIGHT_ROOM.wall;
@@ -284,18 +284,21 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   // Цвет бренда: у VK — только в синей версии, у сабрендов — всегда.
   const colored = brand.id !== 'vk' || look.tone === 'blue';
   const ev = (dark ? RIG.ev : RIG.evLight) + profile.ev + look.brightness * 1.6;
-  const gain = Math.pow(2, ev + (colored ? 0 : RIG.monoEv));
+  const vk = brand.id === 'vk';
+  const gain = Math.pow(2, ev + (vk ? RIG.vkEv : 0));
   const b = RIG.bounce;
   // Отлив — широкий мягкий луч по той же оси с центром во входе луча, как
   // фоновое свечение синего баннера; дальше по оси он съехал бы вбок пятном.
   const bPos: Vec3 = [ex + nx * b.out, ey + ny * b.out, b.height];
+  // Цвет меняет только оттенок. Широкий ореол VK задаётся отдельной ручкой.
+  const bounceGain = vk ? b.baseGain + (b.gain - b.baseGain) * look.diffusion : b.gain;
   const bounce: Lamp = {
     pos: bPos,
     dir: aim(bPos, b.reach),
     color: tint(brand.accent, colored ? 1 : 0),
     coneHalf: b.cone * DEG,
     softness: 1,
-    gain: gain * (colored ? b.gain : b.monoGain),
+    gain: gain * bounceGain,
     radius: b.radius,
     decay: b.decay,
   };
