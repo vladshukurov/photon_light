@@ -142,14 +142,14 @@ export function frameHalf(aspect: number): [number, number] {
 
 /*
   Точка на краю кадра в направлении угла. Диагональ сжата по горизонтали
-  (DIAG): угловые направления стоят на верхнем/нижнем крае, а не в самом
-  углу — заход света примерно в трети ширины, как в баннере 16719:174708.
+  (SOURCE_DIAGONAL): стандартные боковые точки стоят у краёв, как до
+  калибровки — на 22.5% и 77.5% ширины кадра.
 */
-const DIAG = 0.36;
+export const SOURCE_DIAGONAL = 0.55;
 
 export function edgePoint(angleDeg: number, aspect: number): [number, number] {
   const a = angleDeg * DEG;
-  const qx = Math.sin(a) * DIAG,
+  const qx = Math.sin(a) * SOURCE_DIAGONAL,
     qy = Math.cos(a);
   const m = Math.max(Math.abs(qx), Math.abs(qy), 1e-6);
   const [hw, hh] = frameHalf(aspect);
@@ -221,7 +221,7 @@ export function sourceFromFrame(u: number, v: number, aspect: number) {
     return { side: nx * (y - ey) - ny * (x - ex), along: nx * (x - ex) + ny * (y - ey) };
   };
   // угол edgePoint считается в сжатой по x системе — разжимаем
-  const guess = (Math.atan2(x / hw / DIAG, y / hh) * 180) / Math.PI;
+  const guess = (Math.atan2(x / hw / SOURCE_DIAGONAL, y / hh) * 180) / Math.PI;
   let angle = guess;
   let best = Infinity;
   const N = 360;

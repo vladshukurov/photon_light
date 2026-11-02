@@ -9,7 +9,7 @@ import {
   serializeLook,
   type Look,
 } from './look';
-import { buildScene, sourceFromFrame, sourceOnFrame } from './scene';
+import { buildScene, edgePoint, frameHalf, sourceFromFrame, sourceOnFrame } from './scene';
 import { historyReducer, initialHistory, restoreLook, STORAGE_KEY } from './history';
 import { aces, luma, solveAmbient, trimInverse } from './tone';
 import { BRANDS, LIGHT_ROOM } from './brands';
@@ -85,6 +85,24 @@ describe('Look boundary', () => {
 });
 
 describe('one light rig', () => {
+  it('keeps the original side direction positions in every format', () => {
+    for (const aspect of [16 / 9, 9 / 16, 1, 4 / 5]) {
+      const [hw, hh] = frameHalf(aspect);
+      for (const [angle, x, y] of [
+        [-45, -0.55, 1],
+        [45, 0.55, 1],
+        [-135, -0.55, -1],
+        [135, 0.55, -1],
+        [0, 0, 1],
+        [180, 0, -1],
+      ]) {
+        const [ex, ey] = edgePoint(angle, aspect);
+        expect(ex / hw).toBeCloseTo(x);
+        expect(ey / hh).toBeCloseTo(y);
+      }
+    }
+  });
+
   it('mirrors left and right directions exactly', () => {
     const left = buildScene(look({ angle: -45 }), 16 / 9);
     const right = buildScene(look({ angle: 45 }), 16 / 9);

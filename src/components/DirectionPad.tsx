@@ -1,6 +1,6 @@
 import { useRef, type PointerEvent } from 'react';
 import { DIRECTIONS, directionOf, type Look } from '../domain/look';
-import { edgePoint, frameHalf } from '../domain/scene';
+import { edgePoint, frameHalf, SOURCE_DIAGONAL } from '../domain/scene';
 import { LiveThumb } from './LiveThumb';
 
 /*
@@ -51,7 +51,7 @@ export function DirectionPad({
     const y = ((e.clientY - rect.top) / rect.height) * H;
     const u = (x - cx) / (fw / 2),
       v = -(y - cy) / (fh / 2);
-    const angle = (Math.atan2(u / 0.6, v) * 180) / Math.PI;
+    const angle = (Math.atan2(u / SOURCE_DIAGONAL, v) * 180) / Math.PI;
     const [ex, ey] = toXY(angle, 1);
     const edgeL = Math.hypot(ex - cx, ey - cy) - OUT_PX;
     const along = Math.hypot(x - cx, y - cy) - edgeL;

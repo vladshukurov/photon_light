@@ -76,7 +76,14 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(rays).toHaveAttribute('aria-valuenow', '0.6');
 
-  await page.waitForTimeout(700);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = localStorage.getItem('photon:look:v3');
+        return saved ? JSON.parse(saved).rays : null;
+      }),
+    )
+    .toBe(0.6);
   await page.reload();
   await expect(page.getByRole('button', { name: 'Экспорт', exact: true })).toBeEnabled({
     timeout: 60_000,
@@ -139,13 +146,22 @@ test('drags the light on the canvas', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: 'Текст надписи' })).toHaveValue('');
 });
 
-test('default VK light follows the Figma banner outside its lettering', async ({ page }) => {
+test('calibrated VK light follows the Figma banner outside its lettering', async ({ page }) => {
   await ready(page);
   await page.locator('input[type=file]').setInputFiles({
     name: 'calibration.json',
     mimeType: 'application/json',
     buffer: Buffer.from(
-      JSON.stringify({ version: 3, look: { width: 1820, height: 647, grain: 0 } }),
+      // The banner enters at 32% of the top edge; default side presets stay at 22.5%.
+      JSON.stringify({
+        version: 3,
+        look: {
+          width: 1820,
+          height: 647,
+          grain: 0,
+          angle: (-Math.atan(0.36 / 0.55) * 180) / Math.PI,
+        },
+      }),
     ),
   });
   await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
