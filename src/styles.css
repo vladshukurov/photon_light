@@ -492,8 +492,9 @@ button:disabled {
 .direction-pad svg:active {
   cursor: grabbing;
 }
+.direction-pad svg:focus,
 .direction-pad svg:focus-visible {
-  outline-offset: -2px;
+  outline: none;
 }
 .pad-frame {
   fill: none;
