@@ -14,8 +14,11 @@ import { loopProgress, type Look } from '../domain/look';
 import { buildScene, sourceFromFrame, sourceOnFrame } from '../domain/scene';
 
 export interface PreviewHandle {
-  image: (format: 'png' | 'jpg', width: number, height: number) => Promise<Blob>;
-  layers: (width: number, height: number) => Promise<{ layers: Layer[]; clipped: boolean }>;
+  image: (format: 'png' | 'jpg', width: number, height: number, quality?: number) => Promise<Blob>;
+  layers: (
+    width: number,
+    height: number,
+  ) => Promise<{ layers: Layer[]; clipped: boolean; composite: Blob }>;
   /** Доля прохода, которую сейчас показывает превью: её же получит экспорт кадра. */
   progress: () => number;
 }
@@ -184,9 +187,16 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
     };
     return {
       progress: () => loopProgress(live.current.time, live.current.look.motion.duration),
-      async image(format, width, height) {
+      async image(format, width, height, quality) {
         try {
-          return await exportImage(current(), sceneFor(width, height), width, height, format);
+          return await exportImage(
+            current(),
+            sceneFor(width, height),
+            width,
+            height,
+            format,
+            quality,
+          );
         } finally {
           invalidateRef.current();
         }

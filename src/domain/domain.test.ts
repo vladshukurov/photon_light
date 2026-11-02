@@ -25,6 +25,7 @@ describe('Look boundary', () => {
       tone: 'blue',
       room: 'light',
       expression: 0.7,
+      diffusion: 0.6,
       angle: 137,
       distance: 1.4,
       width: 1080,
@@ -42,6 +43,7 @@ describe('Look boundary', () => {
       room: 'neon',
       tone: 'red',
       brightness: 99,
+      diffusion: 99,
       haze: Number.NaN,
       angle: 370,
       width: 99999,
@@ -52,6 +54,7 @@ describe('Look boundary', () => {
     expect(l.room).toBe('dark');
     expect(l.tone).toBe('mono');
     expect(l.brightness).toBe(1);
+    expect(l.diffusion).toBe(1);
     expect(l.haze).toBe(DEFAULT_LOOK.haze);
     expect(l.angle).toBeCloseTo(10);
     expect(l.width).toBe(4096);
@@ -119,12 +122,39 @@ describe('one light rig', () => {
     }
   });
 
+  it('VK tone changes colour without changing the light distribution', () => {
+    for (const room of ['dark', 'light'] as const) {
+      for (const direction of DIRECTIONS) {
+        const mono = buildScene(look({ room, angle: direction.angle, tone: 'mono' }), 16 / 9);
+        const blue = buildScene(look({ room, angle: direction.angle, tone: 'blue' }), 16 / 9);
+        expect(blue.light.gain).toBe(mono.light.gain);
+        expect(blue.bounce.gain).toBe(mono.bounce.gain);
+        expect(blue.light.coneHalf).toBe(mono.light.coneHalf);
+        expect(blue.bounce.coneHalf).toBe(mono.bounce.coneHalf);
+      }
+    }
+  });
+
+  it('VK diffusion broadens the halo independently of tone and the main beam', () => {
+    for (const tone of ['mono', 'blue'] as const) {
+      const narrow = buildScene(look({ tone, diffusion: 0 }), 1);
+      const wide = buildScene(look({ tone, diffusion: 1 }), 1);
+      expect(wide.light).toEqual(narrow.light);
+      expect(wide.bounce.gain).toBeGreaterThan(narrow.bounce.gain * 10);
+      expect(wide.bounce.coneHalf).toBeGreaterThan(wide.light.coneHalf);
+    }
+    expect(normalizeLook({ tone: 'blue' }).diffusion).toBe(0);
+    expect(buildScene(look({ brand: 'music', diffusion: 1 }), 1)).toEqual(
+      buildScene(look({ brand: 'music', diffusion: 0 }), 1),
+    );
+  });
+
   it('VK mono is a white lamp with a faint white halo instead of a bounce', () => {
     const vk = buildScene(look({ brand: 'vk', tone: 'mono' }), 1);
     const blue = buildScene(look({ brand: 'vk', tone: 'blue' }), 1);
     expect(vk.light.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
     expect(vk.bounce.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
-    expect(vk.bounce.gain / vk.light.gain).toBeLessThan(blue.bounce.gain / blue.light.gain);
+    expect(vk.bounce.gain / vk.light.gain).toBe(blue.bounce.gain / blue.light.gain);
     expect(Math.max(...vk.albedo) - Math.min(...vk.albedo)).toBeLessThan(0.002);
   });
 
@@ -267,6 +297,7 @@ describe('export boundary', () => {
     expect(() => validateSize(5000, 1080)).toThrow();
     expect(safeFilename('a/b:c*?')).toBe('abc');
     expect(safeFilename('   ')).toBe('photon');
+    expect(safeFilename('a'.repeat(80) + ' 1920×1080.png')).toBe('a'.repeat(80) + '.png');
   });
 });
 

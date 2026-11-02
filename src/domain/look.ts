@@ -35,6 +35,8 @@ export interface Look {
   expression: number;
   brightness: number;
   spread: number;
+  /** Сила широкого ореола VK, независимо от цвета света. */
+  diffusion: number;
   softness: number;
   rays: number;
   rayCount: number;
@@ -74,6 +76,7 @@ export const RANGES = {
   distance: { min: 0.2, max: 2, def: 1 },
   expression: { min: 0, max: 1, def: 0 },
   brightness: { min: -1, max: 1, def: 0 },
+  diffusion: { min: 0, max: 1, def: 0 },
   spread: { min: 0, max: 1, def: 0.5 },
   softness: { min: 0, max: 1, def: 0.6 },
   rays: { min: 0, max: 1, def: 0 },
@@ -96,6 +99,7 @@ export const DEFAULT_LOOK: Look = {
   expression: 0,
   brightness: 0,
   spread: 0.5,
+  diffusion: 0,
   softness: 0.6,
   rays: 0,
   rayCount: 7,

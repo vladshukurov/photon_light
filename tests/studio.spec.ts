@@ -11,6 +11,8 @@ async function ready(page: Page) {
 
 async function customSize(dialog: Locator, width: number, height: number) {
   await dialog.getByRole('button', { name: 'Свой', exact: true }).click();
+  const lock = dialog.getByRole('button', { name: 'Сохранять пропорции', exact: true });
+  if ((await lock.getAttribute('aria-pressed')) === 'true') await lock.click();
   await dialog.getByRole('spinbutton', { name: 'Ширина' }).fill(String(width));
   await dialog.getByRole('spinbutton', { name: 'Высота' }).fill(String(height));
 }
@@ -94,6 +96,28 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   expect(errors).toEqual([]);
 });
 
+test('VK diffusion survives tone changes, undo and preset export', async ({ page }) => {
+  await ready(page);
+  const diffusion = page.getByRole('slider', { name: 'Рассеивание', exact: true });
+  await expect(diffusion).toHaveAttribute('aria-valuenow', '0');
+  await diffusion.focus();
+  await page.keyboard.press('End');
+  await expect(diffusion).toHaveAttribute('aria-valuenow', '1');
+  await page.getByRole('button', { name: 'Синий отлив', exact: true }).click();
+  await expect(diffusion).toHaveAttribute('aria-valuenow', '1');
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Сохранить JSON', exact: true }).click();
+  const file = JSON.parse(await readFile((await (await downloadPromise).path())!, 'utf8'));
+  expect(file.look.diffusion).toBe(1);
+  expect(file.look.tone).toBe('blue');
+  await page.getByRole('button', { name: 'Сбросить', exact: true }).click();
+  await expect(diffusion).toHaveAttribute('aria-valuenow', '0');
+  await page.getByRole('button', { name: 'Отменить', exact: true }).click();
+  await expect(diffusion).toHaveAttribute('aria-valuenow', '1');
+  await page.getByRole('button', { name: 'Музыка', exact: true }).click();
+  await expect(diffusion).toHaveCount(0);
+});
+
 test('drags the light on the canvas', async ({ page }) => {
   await ready(page);
   const canvas = page.locator('.canvas-hit');
@@ -113,6 +137,60 @@ test('drags the light on the canvas', async ({ page }) => {
   await expect(page.getByRole('slider', { name: 'Размер' })).toBeVisible();
   await page.getByRole('button', { name: 'Убрать' }).click();
   await expect(page.getByRole('textbox', { name: 'Текст надписи' })).toHaveValue('');
+});
+
+test('default VK light follows the Figma banner outside its lettering', async ({ page }) => {
+  await ready(page);
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'calibration.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({ version: 3, look: { width: 1820, height: 647, grain: 0 } }),
+    ),
+  });
+  await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await customSize(dialog, 455, 162);
+  const downloading = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Скачать PNG', exact: true }).click();
+  const actual = await readFile((await (await downloading).path())!);
+  const reference = await readFile('docs/references/ad-vk-white.png');
+  const rmse = await page.evaluate(
+    async ({ actual, reference }) => {
+      const decode = async (data: string) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${data}`;
+        await img.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = 455;
+        canvas.height = 162;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, 455, 162);
+        return ctx.getImageData(0, 0, 455, 162).data;
+      };
+      const [a, b] = await Promise.all([decode(actual), decode(reference)]);
+      let squared = 0,
+        count = 0;
+      for (let y = 0; y < 162; y++)
+        for (let x = 0; x < 455; x++) {
+          // The generator renders light, not the banner's three blocks of copy.
+          if (
+            (x > 122 && x < 331 && y > 33 && y < 112) ||
+            (x > 170 && x < 285 && y > 108 && y < 130) ||
+            (x > 160 && x < 330 && y > 148)
+          )
+            continue;
+          const i = (y * 455 + x) * 4;
+          const delta = (a[i] + a[i + 1] + a[i + 2] - b[i] - b[i + 1] - b[i + 2]) / 3;
+          squared += delta * delta;
+          count++;
+        }
+      return Math.sqrt(squared / count);
+    },
+    { actual: actual.toString('base64'), reference: reference.toString('base64') },
+  );
+  // Old placement near the corner scores about 11; the calibrated beam is below 3.
+  expect(rmse).toBeLessThan(4);
 });
 
 test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ page }) => {
@@ -151,11 +229,13 @@ test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ 
   const { unzipSync } = await import('fflate');
   const files = unzipSync(new Uint8Array(await readFile((await (await downloadPromise).path())!)));
   expect(Object.keys(files)).toEqual([
+    '00-composite.png',
     '01-background.png',
     '02-light.png',
     '03-volume.png',
     'README.txt',
   ]);
+  expect(Buffer.from(files['00-composite.png'])).toEqual(pngBytes);
   await dialog.getByRole('button', { name: 'Закрыть', exact: true }).click();
 
   await page.getByRole('textbox', { name: 'Название сцены' }).fill('Первый свет');
@@ -197,6 +277,55 @@ test('imports a prototype preset with 58 keys', async ({ page }) => {
   );
 });
 
+test('keeps export proportions and preferences and previews the actual JPEG', async ({ page }) => {
+  await ready(page);
+  await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const lock = dialog.getByRole('button', { name: 'Сохранять пропорции', exact: true });
+  await expect(lock).toHaveAttribute('aria-pressed', 'true');
+  await dialog.getByRole('spinbutton', { name: 'Ширина' }).fill('640');
+  await expect(dialog.getByRole('spinbutton', { name: 'Высота' })).toHaveValue('360');
+  await dialog.getByRole('button', { name: 'Слои', exact: true }).click();
+  await expect(dialog.getByRole('spinbutton', { name: 'Ширина' })).toHaveValue('640');
+  await expect(dialog).toContainText('Слои непрозрачные');
+  await dialog.getByRole('button', { name: 'Картинка', exact: true }).click();
+  await dialog.getByRole('button', { name: 'JPG', exact: true }).click();
+  const quality = dialog.getByRole('slider', { name: 'Качество JPG' });
+  await quality.focus();
+  await page.keyboard.press('Home');
+  await dialog.getByRole('button', { name: '100%', exact: true }).click();
+  const image = dialog.getByRole('img', { name: 'Готовое изображение для экспорта' });
+  await expect(image).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Вписать', exact: true })).toBeVisible();
+  expect(await image.evaluate((img) => img.getBoundingClientRect().width)).toBe(640);
+  const firstSize = await image.evaluate(
+    async (img) => (await (await fetch((img as HTMLImageElement).src)).blob()).size,
+  );
+  await quality.focus();
+  await page.keyboard.press('End');
+  await dialog.getByRole('button', { name: '100%', exact: true }).click();
+  await expect(image).toBeVisible();
+  const cached = await image.evaluate(async (img) =>
+    Array.from(new Uint8Array(await (await fetch((img as HTMLImageElement).src)).arrayBuffer())),
+  );
+  expect(cached.length).toBeGreaterThan(firstSize);
+  const downloading = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Скачать JPG', exact: true }).click();
+  expect(await readFile((await (await downloading).path())!)).toEqual(Buffer.from(cached));
+  await dialog.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await page.reload();
+  await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
+  await expect(dialog.getByRole('spinbutton', { name: 'Ширина' })).toHaveValue('640');
+  await expect(dialog.getByRole('button', { name: 'JPG', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(quality).toHaveValue('100');
+  await dialog.getByRole('spinbutton', { name: 'Ширина' }).fill('5000');
+  await expect(dialog.getByRole('alert')).toContainText('от 64 до 4096');
+  await expect(dialog.getByRole('button', { name: 'Скачать JPG', exact: true })).toBeDisabled();
+});
+
 test('fits mobile without horizontal overflow and switches format', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
@@ -210,6 +339,11 @@ test('fits mobile without horizontal overflow and switches format', async ({ pag
     .toBeCloseTo(16 / 9, 1);
   await mkdir('test-results/screenshots', { recursive: true });
   await page.screenshot({ path: 'test-results/screenshots/mobile.png', fullPage: true });
+  await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await expect(dialog.getByRole('button', { name: 'Скачать PNG', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/screenshots/mobile-export.png', fullPage: true });
 });
 
 test('restores a lost WebGL context without losing the scene', async ({ page }) => {

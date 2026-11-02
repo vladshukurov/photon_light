@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import {
   ArrowDownToLine,
   Check,
   Copy,
-  Film,
   Image,
   Layers,
   LoaderCircle,
-  Square,
+  LockKeyhole,
+  UnlockKeyhole,
 } from 'lucide-react';
 import { Modal } from './Modal';
 import { Segmented } from './controls';
@@ -15,41 +15,26 @@ import { LiveThumb } from './LiveThumb';
 import type { PreviewHandle } from './Preview';
 import type { Look } from '../domain/look';
 import {
-  copyPng,
-  download,
-  downloadLayersZip,
-  exportVideo,
-  MAX_DIMENSION,
-  videoType,
-  type Layer,
-} from '../engine/export';
+  EXPORT_SETTINGS_KEY,
+  exportPresets,
+  restoreExportSettings,
+  type ExportSettings,
+} from '../domain/exportSettings';
+import { copyPng, download, downloadLayersZip, MAX_DIMENSION, type Layer } from '../engine/export';
 
-type Kind = 'image' | 'video' | 'layers';
-type Preset = { id: string; label: string; width: number; height: number };
-
-const VIDEO_LIMIT = 1920;
-/** Вкладка видео вернётся вместе с моушеном. */
-const VIDEO_ENABLED = false;
-
-/** Готовые размеры в пропорции текущего формата. */
-function presetsFor(look: Look, kind: Kind): Preset[] {
-  const a = look.width / look.height;
-  const fit = (long: number) =>
-    a >= 1
-      ? { width: long, height: Math.round(long / a) }
-      : { width: Math.round(long * a), height: long };
-  if (kind === 'video')
-    return [
-      { id: 'fhd', label: 'Full HD', ...fit(1920) },
-      { id: 'hd', label: 'HD', ...fit(1280) },
-    ];
-  const long = Math.max(look.width, look.height);
-  return [
-    { id: 'x1', label: '1×', width: look.width, height: look.height },
-    { id: 'x2', label: '2×', ...fit(Math.min(long * 2, MAX_DIMENSION)) },
-    { id: '4k', label: '4K', ...fit(3840) },
-  ];
-}
+type FilePreview = { key: string; blob: Blob; url: string };
+type LayerPack = {
+  key: string;
+  items: (Layer & { url: string })[];
+  composite: Blob;
+  url: string;
+  clipped: boolean;
+};
+const pauseForPaint = () => new Promise((resolve) => setTimeout(resolve, 50));
+const fileSize = (bytes: number) =>
+  bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(1)} КБ`
+    : `${(bytes / 1024 / 1024).toFixed(2)} МБ`;
 
 export function ExportDialog({
   look,
@@ -60,142 +45,163 @@ export function ExportDialog({
   preview: RefObject<PreviewHandle | null>;
   onClose: () => void;
 }) {
-  const video = videoType();
-  const [kind, setKind] = useState<Kind>('image');
-  const [format, setFormat] = useState<'png' | 'jpg'>('png');
-  const [preset, setPreset] = useState('x1');
-  const [custom, setCustom] = useState({ width: look.width, height: look.height });
-  const [seconds, setSeconds] = useState('6');
-  const [fps, setFps] = useState('30');
-  const [busy, setBusy] = useState(false),
-    [progress, setProgress] = useState(0),
-    [done, setDone] = useState(''),
-    [error, setError] = useState('');
-  // Готовые слои: показываются списком, каждый можно скопировать или скачать.
-  const [layers, setLayers] = useState<(Layer & { url: string })[] | null>(null);
-  const abort = useRef<AbortController | null>(null);
-  const surface = useRef<HTMLDivElement>(null);
-
-  const presets = presetsFor(look, kind);
+  const [settings, setSettings] = useState(() => restoreExportSettings(look));
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
+  const [error, setError] = useState('');
+  const [zoom, setZoom] = useState(false);
+  const [file, setFile] = useState<FilePreview | null>(null);
+  const [pack, setPack] = useState<LayerPack | null>(null);
+  const { kind, format, preset, locked, quality } = settings;
+  const presets = exportPresets(look);
   const chosen = presets.find((p) => p.id === preset);
-  const { width, height } = chosen ?? custom;
-  const limit = kind === 'video' ? VIDEO_LIMIT : MAX_DIMENSION;
-  const valid =
-    [width, height].every((n) => Number.isInteger(n) && n >= 64 && n <= limit) &&
-    (kind !== 'video' || width * height <= 1920 * 1080);
+  const { width, height } = chosen ?? settings;
+  const validSide = (n: number) => Number.isInteger(n) && n >= 64 && n <= MAX_DIMENSION;
+  const valid = validSide(width) && validSide(height);
+  const lookKey = JSON.stringify(look);
+  const keyFor = (f: 'png' | 'jpg') =>
+    `${lookKey}:${width}x${height}:${f}:${f === 'jpg' ? quality : ''}`;
+  const imageKey = keyFor(format);
+  const layersKey = `${lookKey}:${width}x${height}`;
+  const shownPack = pack?.key === layersKey ? pack : null;
+  const shownFile = file?.key === imageKey ? file : null;
+  const result =
+    kind === 'layers' ? shownPack && { url: shownPack.url, blob: shownPack.composite } : shownFile;
 
-  useEffect(() => () => abort.current?.abort(), []);
-  useEffect(() => () => layers?.forEach((l) => URL.revokeObjectURL(l.url)), [layers]);
-  // Слои собраны под конкретный размер и кадр — при смене они устаревают.
-  const layersKey = `${width}×${height}:${JSON.stringify(look)}`;
-  const [layersFor, setLayersFor] = useState('');
-  const shownLayers = layersFor === layersKey ? layers : null;
   useEffect(() => {
-    const hidden = () => {
-      if (document.hidden) abort.current?.abort();
-    };
-    document.addEventListener('visibilitychange', hidden);
-    return () => document.removeEventListener('visibilitychange', hidden);
-  }, []);
-
-  const switchKind = (next: Kind) => {
-    if (next === 'video' && !video) return;
-    setKind(next);
-    setPreset(presetsFor(look, next)[0].id);
-    setDone('');
-    setError('');
-  };
-
-  const run = async () => {
-    const controller = new AbortController();
-    abort.current = controller;
-    setError('');
-    setDone('');
-    setBusy(true);
-    setProgress(0);
-    // Дать браузеру показать состояние до синхронного чтения с GPU.
-    await new Promise((r) => setTimeout(r, 50));
+    if (!valid) return;
     try {
-      if (kind === 'video') {
-        const result = await exportVideo(
-          look,
-          width,
-          height,
-          Number(seconds),
-          Number(fps),
-          controller.signal,
-          setProgress,
-          surface.current ?? undefined,
-        );
-        download(result.blob, `${look.name}.${result.ext}`);
-        setDone(`Видео ${result.ext.toUpperCase()} скачано`);
-      } else if (kind === 'layers') {
-        if (!preview.current) throw new Error('Сцена ещё не готова.');
-        const result = await preview.current.layers(width, height);
-        setLayers(result.layers.map((l) => ({ ...l, url: URL.createObjectURL(l.blob) })));
-        setLayersFor(layersKey);
-        if (result.clipped) setDone('Слои готовы. В этой сцене сложение слоёв приблизительное');
-      } else {
-        if (!preview.current) throw new Error('Сцена ещё не готова.');
-        const blob = await preview.current.image(format, width, height);
-        download(blob, `${look.name} ${width}×${height}.${format}`);
-        setDone(`${format.toUpperCase()} скачан`);
+      localStorage.setItem(EXPORT_SETTINGS_KEY, JSON.stringify({ ...settings, width, height }));
+    } catch {
+      /* Export still works when browser storage is unavailable. */
+    }
+  }, [settings, width, height, valid]);
+  useEffect(
+    () => () => {
+      if (file) URL.revokeObjectURL(file.url);
+    },
+    [file],
+  );
+  useEffect(
+    () => () => {
+      if (pack) {
+        pack.items.forEach((l) => URL.revokeObjectURL(l.url));
+        URL.revokeObjectURL(pack.url);
       }
+    },
+    [pack],
+  );
+
+  const update = (patch: Partial<ExportSettings>) => {
+    setSettings((s) => ({ ...s, ...patch }));
+    setDone('');
+    setError('');
+    setZoom(false);
+  };
+  const changeSize = (axis: 'width' | 'height', value: number) => {
+    const next = { width, height, [axis]: value };
+    if (locked && Number.isFinite(value)) {
+      if (axis === 'width') next.height = Math.round(value / settings.ratio);
+      else next.width = Math.round(value * settings.ratio);
+    }
+    update({ ...next, preset: 'custom' });
+  };
+  const getImage = async (f = format) => {
+    const key = keyFor(f);
+    if (file?.key === key) return file.blob;
+    if (!preview.current || !valid) throw new Error('Проверьте размер изображения.');
+    await pauseForPaint();
+    await document.fonts.ready;
+    const blob = await preview.current.image(f, width, height, quality);
+    if (f === format) setFile({ key, blob, url: URL.createObjectURL(blob) });
+    return blob;
+  };
+  const perform = async (action: () => Promise<void>) => {
+    if (busy || !valid) return;
+    setBusy(true);
+    setError('');
+    setDone('');
+    try {
+      await action();
     } catch (e) {
-      setError(
-        e instanceof DOMException && e.name === 'AbortError'
-          ? 'Запись остановлена. Во время записи держите вкладку открытой.'
-          : e instanceof Error
-            ? e.message
-            : 'Не удалось экспортировать сцену.',
-      );
+      setError(e instanceof Error ? e.message : 'Не удалось подготовить файл.');
     } finally {
       setBusy(false);
-      abort.current = null;
     }
   };
-
-  const copy = async (blob: Blob | Promise<Blob>, what: string) => {
-    setError('');
-    setDone('');
-    try {
+  const buildLayers = async () => {
+    if (shownPack) return shownPack;
+    if (!preview.current) throw new Error('Сцена ещё не готова.');
+    await pauseForPaint();
+    await document.fonts.ready;
+    const result = await preview.current.layers(width, height);
+    const next = {
+      key: layersKey,
+      items: result.layers.map((l) => ({ ...l, url: URL.createObjectURL(l.blob) })),
+      composite: result.composite,
+      url: URL.createObjectURL(result.composite),
+      clipped: result.clipped,
+    };
+    setPack(next);
+    return next;
+  };
+  const inspectFile = () =>
+    void perform(async () => {
+      if (kind === 'layers') await buildLayers();
+      else await getImage();
+      setZoom(true);
+    });
+  const save = () =>
+    void perform(async () => {
+      if (kind === 'layers') {
+        const ready = await buildLayers();
+        await downloadLayersZip(ready.items, `${look.name} ${width}×${height}`, ready.composite);
+        setDone('ZIP со слоями и цельным PNG готов');
+      } else {
+        download(await getImage(), `${look.name} ${width}×${height}.${format}`);
+        setDone(`${format.toUpperCase()} готов к скачиванию`);
+      }
+    });
+  const copy = (blob: Blob | Promise<Blob>, label: string) =>
+    void perform(async () => {
+      // ClipboardItem receives the promise during the click, before awaiting rendering.
       await copyPng(blob);
-      setDone(`${what} в буфере — вставьте в Figma через ⌘V`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось скопировать.');
-    }
-  };
-  const copyImage = () => {
-    if (!preview.current || !valid) return;
-    setBusy(true);
-    // Промис отдаётся буферу сразу, пока клик ещё «свежий».
-    const blob = preview.current.image('png', width, height);
-    void copy(blob, 'Картинка').finally(() => setBusy(false));
-  };
-
-  const fileLabel =
-    kind === 'video'
-      ? (video?.ext ?? 'mp4').toUpperCase()
-      : kind === 'layers'
-        ? '3 слоя PNG'
-        : format.toUpperCase();
-  const action =
-    kind === 'video'
-      ? 'Записать видео'
-      : kind === 'layers'
-        ? 'Собрать слои'
-        : `Скачать ${fileLabel}`;
+      setDone(`${label} в буфере — вставьте в Figma`);
+    });
   const ratio = valid ? width / height : look.width / look.height;
-  const thumbW = ratio >= 1 ? 360 : Math.round(360 * ratio);
-  const thumbH = ratio >= 1 ? Math.round(360 / ratio) : 360;
+  const thumbW = ratio >= 1 ? 360 : Math.max(1, Math.round(360 * ratio));
+  const thumbH = ratio >= 1 ? Math.max(1, Math.round(360 / ratio)) : 360;
+  const byteLabel = result ? fileSize(result.blob.size) : null;
 
   return (
     <Modal title="Экспорт" onClose={onClose} busy={busy} wide>
       <div className="export">
         <figure className="export-preview">
-          <div className="export-well">
-            {busy && kind === 'video' ? (
-              <div className="recording" ref={surface} />
+          <div className="preview-tools">
+            <span>{result ? 'Готовый файл' : 'Предпросмотр'}</span>
+            {zoom ? (
+              <button className="ghost-button" onClick={() => setZoom(false)}>
+                Вписать
+              </button>
+            ) : (
+              <button className="ghost-button" disabled={busy || !valid} onClick={inspectFile}>
+                100%
+              </button>
+            )}
+          </div>
+          <div
+            className={`export-well${zoom && result ? ' actual-size' : ''}`}
+            tabIndex={zoom ? 0 : undefined}
+            aria-label={zoom ? 'Готовый файл в масштабе 100%, прокрутка' : undefined}
+          >
+            {result ? (
+              <img
+                className="export-thumb"
+                src={result.url}
+                alt="Готовое изображение для экспорта"
+                width={width}
+                height={height}
+              />
             ) : (
               <LiveThumb
                 look={look}
@@ -207,128 +213,146 @@ export function ExportDialog({
             )}
           </div>
           <figcaption>
-            <strong>{valid ? `${width} × ${height}` : 'Размер вне диапазона'}</strong>
+            <strong>{valid ? `${width} × ${height}` : 'Проверьте размер'}</strong>
             <span>
-              {fileLabel}
-              {kind === 'video' && ` · ${seconds} с · ${fps} fps`}
+              {kind === 'layers' ? 'Цельный PNG' : format.toUpperCase()}
+              {byteLabel ? ` · ${byteLabel}` : ''}
             </span>
           </figcaption>
+          <p className="hint">
+            {result
+              ? kind === 'layers'
+                ? 'Цельный кадр из архива, с зерном.'
+                : 'Предпросмотр того же файла, который будет скачан.'
+              : 'Нажмите 100%, чтобы проверить готовый файл и узнать его вес.'}
+          </p>
         </figure>
-
         <div className="export-side">
           <fieldset className="export-form" disabled={busy}>
             <legend className="sr-only">Параметры экспорта</legend>
             <Segmented
               label="Что экспортировать"
               value={kind}
-              // Видео скрыто, пока в инструменте нет моушена; запись готова в engine/export.
               options={[
                 { id: 'image', label: 'Картинка', icon: <Image size={14} /> },
-                ...(VIDEO_ENABLED
-                  ? [{ id: 'video' as const, label: 'Видео', icon: <Film size={14} /> }]
-                  : []),
                 { id: 'layers', label: 'Слои', icon: <Layers size={14} /> },
               ]}
-              onChange={switchKind}
+              onChange={(kind) => update({ kind })}
             />
-
             <div className="field">
               <span className="field-label">Размер</span>
-              <Segmented
-                label="Размер"
-                value={chosen ? preset : 'custom'}
-                options={[
-                  ...presets.map((p) => ({ id: p.id, label: p.label })),
-                  { id: 'custom', label: 'Свой' },
-                ]}
-                onChange={(id) => {
-                  if (id === 'custom') setCustom({ width, height });
-                  setPreset(id);
-                }}
-              />
-              <div className="dimension-fields">
-                {(['width', 'height'] as const).map((key) => (
-                  <label key={key}>
-                    <span>{key === 'width' ? 'Ширина' : 'Высота'}</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      aria-label={key === 'width' ? 'Ширина' : 'Высота'}
-                      min={64}
-                      max={limit}
-                      value={
-                        Number.isFinite(key === 'width' ? width : height)
-                          ? key === 'width'
-                            ? width
-                            : height
-                          : ''
-                      }
-                      onChange={(e) => {
-                        setCustom({ width, height, [key]: e.target.valueAsNumber });
-                        setPreset('custom');
-                      }}
-                    />
-                    <small>px</small>
-                  </label>
+              <div className="export-sizes" role="group" aria-label="Размер">
+                {presets.map((p) => (
+                  <button
+                    key={p.id}
+                    aria-pressed={chosen?.id === p.id}
+                    onClick={() =>
+                      update({
+                        preset: p.id,
+                        width: p.width,
+                        height: p.height,
+                        ratio: p.width / p.height,
+                      })
+                    }
+                  >
+                    <strong>{p.label}</strong>
+                    <small>
+                      {p.width} × {p.height}
+                    </small>
+                  </button>
                 ))}
+                <button
+                  aria-pressed={!chosen}
+                  onClick={() => update({ preset: 'custom', width, height })}
+                >
+                  Свой
+                </button>
               </div>
+              <div className="dimension-fields">
+                {(['width', 'height'] as const).map((axis) => {
+                  const value = axis === 'width' ? width : height;
+                  const label = axis === 'width' ? 'Ширина' : 'Высота';
+                  return (
+                    <label key={axis}>
+                      <span>{label}</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        aria-label={label}
+                        min={64}
+                        max={MAX_DIMENSION}
+                        aria-invalid={!validSide(value)}
+                        aria-describedby={!valid ? 'export-size-error' : undefined}
+                        value={Number.isFinite(value) ? value : ''}
+                        onChange={(e) => changeSize(axis, e.target.valueAsNumber)}
+                      />
+                      <small>px</small>
+                    </label>
+                  );
+                })}
+              </div>
+              <button
+                className="ratio-lock"
+                aria-pressed={locked}
+                onClick={() =>
+                  update({
+                    locked: !locked,
+                    ratio: valid ? width / height : look.width / look.height,
+                  })
+                }
+              >
+                {locked ? <LockKeyhole size={14} /> : <UnlockKeyhole size={14} />} Сохранять
+                пропорции
+              </button>
+              {!valid && (
+                <p id="export-size-error" className="message error" role="alert">
+                  Каждая сторона — целое число от 64 до {MAX_DIMENSION} px.
+                </p>
+              )}
             </div>
-
-            {kind === 'image' && (
-              <div className="field">
-                <span className="field-label">Формат</span>
-                <Segmented
-                  label="Формат файла"
-                  value={format}
-                  options={[
-                    { id: 'png', label: 'PNG' },
-                    { id: 'jpg', label: 'JPG' },
-                  ]}
-                  onChange={setFormat}
-                />
-              </div>
-            )}
-
-            {kind === 'video' && (
+            {kind === 'image' ? (
               <>
                 <div className="field">
-                  <span className="field-label">Длительность</span>
+                  <span className="field-label">Формат</span>
                   <Segmented
-                    label="Длительность"
-                    value={seconds}
-                    options={['3', '6', '10', '15', '20'].map((n) => ({ id: n, label: `${n} с` }))}
-                    onChange={setSeconds}
+                    label="Формат файла"
+                    value={format}
+                    options={[
+                      { id: 'png', label: 'PNG' },
+                      { id: 'jpg', label: 'JPG' },
+                    ]}
+                    onChange={(format) => update({ format })}
                   />
                 </div>
-                <div className="field">
-                  <span className="field-label">Кадров в секунду</span>
-                  <Segmented
-                    label="Кадров в секунду"
-                    value={fps}
-                    options={['24', '30', '60'].map((n) => ({ id: n, label: n }))}
-                    onChange={setFps}
-                  />
-                </div>
+                {format === 'jpg' && (
+                  <label className="quality-field">
+                    <span>
+                      Качество JPG <strong>{Math.round(quality * 100)}%</strong>
+                    </span>
+                    <input
+                      type="range"
+                      aria-label="Качество JPG"
+                      min={40}
+                      max={100}
+                      step={1}
+                      value={Math.round(quality * 100)}
+                      onChange={(e) => update({ quality: Number(e.target.value) / 100 })}
+                    />
+                  </label>
+                )}
               </>
+            ) : (
+              <p className="hint layers-explanation">
+                В ZIP: 3 слоя без зерна и точный цельный PNG с зерном. Слои непрозрачные: фон —
+                снизу, свет и объём — сверху в режиме Plus lighter. Их сложение может отличаться от
+                цельного кадра.
+              </p>
             )}
-
-            <p className="hint">
-              {kind === 'video'
-                ? `Свет стоит на месте, дымка и лучи живут. Запись идёт в реальном времени — не сворачивайте вкладку.${video?.ext === 'webm' ? ' Браузер пишет только WebM.' : ''}`
-                : kind === 'layers'
-                  ? 'Фон кладите снизу, свет и объём — сверху с режимом Plus lighter. Слой можно скопировать и вставить в Figma через ⌘V.'
-                  : 'Отдельный проход в полном разрешении, а не снимок превью.'}
-            </p>
           </fieldset>
-
           {busy && (
-            <div className="export-progress">
-              <progress max={1} value={kind === 'video' ? progress : undefined} />
-              <span>
-                {kind === 'video'
-                  ? `Записываем… ${Math.round(progress * 100)}%`
-                  : 'Считаем свет в полном разрешении…'}
-              </span>
+            <div className="export-progress" role="status">
+              <progress />
+              <span>Готовим файл…</span>
             </div>
           )}
           {error && (
@@ -342,75 +366,73 @@ export function ExportDialog({
               {done}
             </p>
           )}
-
-          {kind === 'layers' && shownLayers && (
-            <ul className="layer-list" aria-label="Слои">
-              {shownLayers.map((l) => (
-                <li key={l.id}>
-                  <img src={l.url} alt="" style={{ aspectRatio: `${width} / ${height}` }} />
-                  <span className="layer-name">
-                    <strong>{l.name}</strong>
-                    <small>{l.blend}</small>
-                  </span>
-                  <button
-                    className="icon-button"
-                    aria-label={`Скопировать слой «${l.name}»`}
-                    title="Скопировать — вставить в Figma через ⌘V"
-                    onClick={() => void copy(l.blob, `Слой «${l.name}»`)}
-                  >
-                    <Copy size={15} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    aria-label={`Скачать слой «${l.name}»`}
-                    title="Скачать PNG"
-                    onClick={() => download(l.blob, `${look.name} — ${l.name}.png`)}
-                  >
-                    <ArrowDownToLine size={15} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+          {kind === 'layers' && shownPack && (
+            <>
+              {shownPack.clipped && (
+                <p className="hint">
+                  В этой сцене сложение слоёв приблизительное. Сверяйтесь с цельным PNG.
+                </p>
+              )}
+              <ul className="layer-list" aria-label="Слои">
+                {shownPack.items.map((l) => (
+                  <li key={l.id}>
+                    <img src={l.url} alt="" style={{ aspectRatio: `${width} / ${height}` }} />
+                    <span className="layer-name">
+                      <strong>{l.name}</strong>
+                      <small>{l.blend}</small>
+                    </span>
+                    <button
+                      className="icon-button"
+                      disabled={busy}
+                      aria-label={`Скопировать слой «${l.name}»`}
+                      onClick={() => copy(l.blob, `Слой «${l.name}»`)}
+                    >
+                      <Copy size={15} />
+                    </button>
+                    <button
+                      className="icon-button"
+                      disabled={busy}
+                      aria-label={`Скачать слой «${l.name}»`}
+                      onClick={() =>
+                        download(l.blob, `${look.name} ${width}×${height} — ${l.name}.png`)
+                      }
+                    >
+                      <ArrowDownToLine size={15} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
-
           <div className="export-actions">
-            {busy && kind === 'video' ? (
-              <button className="button wide" onClick={() => abort.current?.abort()}>
-                <Square size={12} fill="currentColor" />
-                Остановить запись
-              </button>
-            ) : kind === 'layers' && shownLayers ? (
+            {kind === 'image' && (
               <button
                 className="button wide"
-                onClick={() => void downloadLayersZip(shownLayers, look.name)}
+                disabled={busy || !valid}
+                onClick={() => copy(getImage('png'), 'PNG')}
               >
-                <ArrowDownToLine size={15} />
-                Скачать все одним ZIP
+                <Copy size={15} />
+                Скопировать PNG
+              </button>
+            )}
+            {kind === 'layers' && !shownPack ? (
+              <button
+                className="button primary wide"
+                disabled={busy || !valid}
+                onClick={() =>
+                  void perform(async () => {
+                    await buildLayers();
+                  })
+                }
+              >
+                <Layers size={15} />
+                Собрать слои
               </button>
             ) : (
-              <>
-                {kind === 'image' && (
-                  <button
-                    className="button wide"
-                    disabled={busy || !valid}
-                    title="Скопировать PNG — вставить в Figma через ⌘V"
-                    onClick={copyImage}
-                  >
-                    <Copy size={15} />
-                    Скопировать
-                  </button>
-                )}
-                <button className="button primary wide" disabled={busy || !valid} onClick={run}>
-                  {busy ? (
-                    <LoaderCircle size={15} className="spin" />
-                  ) : kind === 'layers' ? (
-                    <Layers size={15} />
-                  ) : (
-                    <ArrowDownToLine size={15} />
-                  )}
-                  {busy ? 'Готовим…' : action}
-                </button>
-              </>
+              <button className="button primary wide" disabled={busy || !valid} onClick={save}>
+                {busy ? <LoaderCircle size={15} className="spin" /> : <ArrowDownToLine size={15} />}
+                {kind === 'layers' ? 'Скачать все одним ZIP' : `Скачать ${format.toUpperCase()}`}
+              </button>
             )}
           </div>
         </div>
