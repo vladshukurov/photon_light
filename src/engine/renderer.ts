@@ -36,6 +36,13 @@ const MODES = { full: 0, base: 1, light: 2, haze: 3, stack: 5 };
 // шаг считается как глубина / steps, и недошедший до стены марш молча темнеет.
 const MAX_HAZE_STEPS = 256;
 
+/** Направление луча в плоскости кадра — ось, от которой отсчитывается угол лучей. */
+function rayAxis(p: Scene): [number, number] {
+  const [x, y] = p.light.dir;
+  const l = Math.hypot(x, y) || 1;
+  return [x / l, y / l];
+}
+
 // --- рендерер ----------------------------------------------------------
 
 export interface RenderOptions {
@@ -203,8 +210,14 @@ export class Renderer {
       .int('uHazeSteps', hazeSteps)
       .float('uNoiseAmount', haze.noise)
       .float('uNoiseScale', haze.noiseScale)
+      .vec2('uGlowPos', ...p.glow.pos)
+      .vec3('uGlowColor', ...p.glow.color)
+      .float('uGlowGain', p.glow.gain)
+      .float('uGlowRadius', p.glow.radius)
       .float('uRays', p.rays.amount)
       .float('uRayCount', p.rays.count)
+      .vec2('uRayOrigin', p.light.pos[0], p.light.pos[1])
+      .vec2('uRayAxis', ...rayAxis(p))
       .float('uVignette', p.vignette)
       .int('uTextOn', hasText ? 1 : 0)
       .texture('uText', this.text.tex)

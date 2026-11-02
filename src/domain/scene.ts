@@ -29,6 +29,8 @@ export interface Scene {
   light: Lamp;
   /** Отлив — свет лампы, отражённый цветной стеной за кадром; в ч/б — слабый белый ореол луча. */
   bounce: Lamp;
+  /** Свечение источника: луч ярче и белее у входа в кадр. gain — добавка к лучу в центре. */
+  glow: { pos: [number, number]; color: Vec3; gain: number; radius: number };
   albedo: Vec3;
   ambient: Vec3;
   roughness: number;
@@ -102,14 +104,17 @@ const RIG = {
   decay: 0.45,
   ev: 3.7,
   evLight: 3.1,
-  /** Сколько цвета бренда в самой лампе: ядро остаётся почти белым. */
+  /** Сколько цвета в лампе синей версии VK: луч остаётся почти белым. */
   keyTint: 0.4,
-  /** Базовая яркость VK — общая для ч/б и синей версии. */
+  /** У сабрендов цвет бренда — в самом луче, как у синей версии VK, только плотнее. */
+  brandTint: 1,
+  /** Базовая яркость VK — общая для ч/б, синей версии и сабрендов. */
   vkEv: 1.2,
   /**
    * Ореол луча: широкий мягкий свет по той же оси с центром во входе луча —
    * как большие размытые клинья в макете. В цветных версиях это отлив цветной
-   * стены. Для VK сила регулируется diffusion от baseGain до gain.
+   * стены. Сила регулируется diffusion от baseGain до gain; у сабрендов
+   * отлив с самого начала заметнее — в нём живёт цвет бренда.
    */
   bounce: {
     out: 0.8,
@@ -119,8 +124,15 @@ const RIG = {
     cone: 16,
     gain: 0.5,
     baseGain: 0.015,
+    brandGain: 0.025,
     decay: 0.3,
   },
+  /**
+   * Свечение источника: у края кадра читается сам прибор, как в макете
+   * баннера. Центр — во входе луча, чуть за краем. Добавка растёт как куб
+   * ползунка: 50% — макет, 100% — ядро уходит в белый.
+   */
+  glow: { out: 0.05, radius: 0.35, gain: 8, keyTint: 0.15 },
 };
 
 /** Цвет света, нормированный по яркости: окраска не меняет экспозицию. */
@@ -282,16 +294,19 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const ambient: Vec3 = dark ? [0, 0, 0] : solveAmbient(LIGHT_ROOM.floor, wall, saturation);
 
   // Цвет бренда: у VK — только в синей версии, у сабрендов — всегда.
+  // Установка у всех брендов одна — дефолтная VK; бренд меняет только цвет
+  // и силу отлива.
   const colored = brand.id !== 'vk' || look.tone === 'blue';
   const ev = (dark ? RIG.ev : RIG.evLight) + profile.ev + look.brightness * 1.6;
   const vk = brand.id === 'vk';
-  const gain = Math.pow(2, ev + (vk ? RIG.vkEv : 0));
+  const gain = Math.pow(2, ev + RIG.vkEv);
   const b = RIG.bounce;
   // Отлив — широкий мягкий луч по той же оси с центром во входе луча, как
   // фоновое свечение синего баннера; дальше по оси он съехал бы вбок пятном.
   const bPos: Vec3 = [ex + nx * b.out, ey + ny * b.out, b.height];
-  // Цвет меняет только оттенок. Широкий ореол VK задаётся отдельной ручкой.
-  const bounceGain = vk ? b.baseGain + (b.gain - b.baseGain) * look.diffusion : b.gain;
+  // Цвет меняет только оттенок. Широкий ореол задаётся отдельной ручкой.
+  const bounceBase = vk ? b.baseGain : b.brandGain;
+  const bounceGain = bounceBase + (b.gain - bounceBase) * look.diffusion;
   const bounce: Lamp = {
     pos: bPos,
     dir: aim(bPos, b.reach),
@@ -309,7 +324,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     light: {
       pos,
       dir,
-      color: tint(brand.accent, colored ? RIG.keyTint : 0),
+      color: tint(brand.accent, vk ? (colored ? RIG.keyTint : 0) : RIG.brandTint),
       coneHalf: coneDeg * DEG,
       softness: Math.min(1, 0.6 + look.softness * 0.65),
       gain,
@@ -317,6 +332,12 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       decay: RIG.decay,
     },
     bounce,
+    glow: {
+      pos: [ex + nx * RIG.glow.out, ey + ny * RIG.glow.out],
+      color: tint(brand.accent, colored ? RIG.glow.keyTint : 0),
+      gain: RIG.glow.gain * look.glow ** 3,
+      radius: RIG.glow.radius,
+    },
     albedo,
     ambient,
     roughness: 0.75,

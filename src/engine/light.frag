@@ -12,10 +12,10 @@ precision highp float;
     air   — свет, рассеянный дымкой в камеру.
 
   Источников два, как на баннерах арт-директора: сама лампа (uKey) — узкий
-  почти белый луч, падающий в кадр клином, — и ореол луча (uBounce) по той же
-  оси, широкий и мягкий, без своего пятна. В цветных версиях ореол — отлив
-  цветной стены: цвет бренда живёт в спаде и в воздухе, а не в горячей точке.
-  В ч/б версии VK ореол слабый и белый.
+  луч, падающий в кадр клином, — и ореол луча (uBounce) по той же оси,
+  широкий и мягкий, без своего пятна. У VK луч почти белый, у сабрендов —
+  цвета бренда; свечение источника у края почти белое у всех. В ч/б версии
+  VK ореол слабый и белый.
 
   Выход — линейный HDR. Экспозиция, bloom, ACES и гамма — в composite.frag.
 */
@@ -30,6 +30,9 @@ out vec4 fragColor;
 #define MODE_LIGHT 2
 #define MODE_HAZE 3
 #define MODE_STACK 5
+
+// На стене рисунок лучей слабее, чем в воздухе.
+#define WALL_RAYS 0.35
 
 uniform vec2  uResolution;
 uniform int   uMode;
@@ -49,6 +52,12 @@ struct Lamp {
 uniform Lamp uKey;
 uniform Lamp uBounce;
 
+// Свечение источника: луч ярче и белее у входа в кадр — виден сам прибор.
+uniform vec2  uGlowPos;
+uniform vec3  uGlowColor;
+uniform float uGlowGain;
+uniform float uGlowRadius;
+
 uniform vec3  uAlbedo;
 uniform vec3  uAmbient;
 uniform float uRoughness;
@@ -62,6 +71,8 @@ uniform float uNoiseScale;
 
 uniform float uRays;          // 0 — сплошной луч, 1 — выраженные мягкие лучи
 uniform float uRayCount;
+uniform vec2  uRayOrigin;     // проекция лампы на кадр: лучи расходятся из неё
+uniform vec2  uRayAxis;       // направление луча в кадре
 
 uniform float uVignette;
 
@@ -117,30 +128,43 @@ float vnoise3(vec3 p) {
 // --- лучи ----------------------------------------------------------------
 
 /*
-  Мягкие лучи — неровная заслонка у самого прибора. Координата — угол поперёк
-  оси в долях полуугла конуса, поэтому все точки одного луча лежат в плоскости
-  через лампу, и на стене лучи веером сходятся к источнику.
+  Лучи — свет сквозь неровную заслонку у самого прибора, как сквозь листву
+  или щель в шторах. Заслонка стоит у лампы, а лампа почти лежит на стене,
+  поэтому на кадре каждый луч — прямая из проекции лампы. Координата рисунка —
+  угол вокруг этой точки в кадре: и на стене, и в дымке луч лежит на одной
+  прямой и не изгибается.
 
-  Рисунок — две октавы шума, а не синусы: шаг и яркость полос неровные, как у
-  света сквозь листву или жалюзи с люфтом. Маска нормирована вокруг единицы —
-  лучи перераспределяют свет, а не гасят кадр. С расстоянием контраст рисунка
-  падает: многократное рассеяние затирает края, и лучи расплываются к концу.
+  Рисунок — сглаженный шум, а не полосы: ширина и яркость лучей неровные.
+  Маска нормирована вокруг единицы — лучи перераспределяют свет, а не гасят
+  кадр, и щели между ними не проваливаются в чёрное. У самого источника
+  лучей ещё нет — они сливаются в свечение; дальше полутень от заслонки
+  растёт, и мелкий рисунок расплывается раньше крупного. На стене рисунок
+  слабее, чем в воздухе: стена освещена ещё и рассеянным светом дымки.
 
   Время сдвигает рисунок медленно и с качанием — лучи переливаются, а не
   едут лентой.
 */
-float rayMask(float x, float dist) {
+float rayMask(vec3 X, float weight) {
   if (uRays <= 0.001) return 1.0;
-  float drift = uTime * 0.045 + 0.35 * sin(uTime * 0.23);
-  float u = x * uRayCount * 0.5 + drift;
-  float n = 0.62 * vnoise1(u) + 0.38 * vnoise1(u * 2.13 + 7.7 - drift * 0.6);
-  float shafts = 0.12 + 1.76 * smoothstep(0.22, 0.78, n);
-  float contrast = exp(-0.28 * dist * dist);
-  return mix(1.0, shafts, uRays * contrast);
+  vec2 rel = X.xy - uRayOrigin;
+  float r = length(rel);
+  float a = atan(uRayAxis.x * rel.y - uRayAxis.y * rel.x, dot(uRayAxis, rel));
+  float drift = uTime * 0.03 + 0.25 * sin(uTime * 0.19);
+  float u = a * uRayCount + drift;
+  // Полутень растёт с расстоянием: мелкая октава гаснет первой.
+  float fine = exp(-0.8 * r * r);
+  float n = 0.72 * vnoise1(u)
+          + 0.28 * fine * vnoise1(u * 2.37 + 7.7 - drift * 0.5);
+  n /= 0.72 + 0.28 * fine;
+  float shafts = mix(0.3, 1.7, smoothstep(0.12, 0.88, n));
+  // У источника лучи сливаются в свечение, вдали — расплываются.
+  float contrast = smoothstep(0.05, 0.6, r) * exp(-0.12 * r * r);
+  return mix(1.0, shafts, uRays * contrast * weight);
 }
 
 // Освещённость от лампы в точке X (без косинуса поверхности).
-vec3 lampAt(Lamp lamp, vec3 X, bool rays, out vec3 L, out float dist) {
+// rays — сила рисунка лучей в этой точке: 0 — без лучей, 1 — в дымке.
+vec3 lampAt(Lamp lamp, vec3 X, float rays, out vec3 L, out float dist) {
   vec3 toL = lamp.pos - X;
   dist = length(toL);
   L = toL / max(dist, 1e-5);
@@ -161,13 +185,23 @@ vec3 lampAt(Lamp lamp, vec3 X, bool rays, out vec3 L, out float dist) {
   float n = 1.0 + 4.0 * (1.0 - lamp.coneSoft) * (1.0 - lamp.coneSoft);
   float profile = exp(-0.693147 * pow(max(theta / w, 1e-4), 2.0 * n));
 
-  float mask = 1.0;
-  if (rays) {
-    vec3 side = normalize(cross(vec3(0.0, 0.0, 1.0), D) + vec3(1e-5, 0.0, 0.0));
-    float across = dot(d, side);
-    mask = rayMask(atan(across, max(tz, 1e-3)) / max(lamp.coneHalf, 1e-3), dist);
-  }
+  float mask = rays > 0.0 ? rayMask(X, rays) : 1.0;
   return lamp.color * (lamp.gain * atten * profile * mask);
+}
+
+/*
+  Свечение источника. У входа луча свет плотнее: дымка у прибора светится
+  сама, и у края кадра читается источник, а не только его свет на стене.
+  Это усиление того же луча, а не отдельное пятно, поэтому форма захода
+  света не меняется и мимо луча ничего не светится. Добавка — цвета свечения
+  (почти белого), поэтому сильное свечение уходит в белый. Спад — лоренциан
+  от точки чуть за краем: ядро прижато к краю и растворяется без границы.
+*/
+vec3 withGlow(vec3 E, vec2 p) {
+  if (uGlowGain <= 0.0) return E;
+  float q = length(p - uGlowPos) / uGlowRadius;
+  float s = dot(E, vec3(0.2126, 0.7152, 0.0722));
+  return E + uGlowColor * (s * uGlowGain / (1.0 + q * q));
 }
 
 float hg(float cosA, float g) {
@@ -221,7 +255,7 @@ void main() {
   bool bounce = uBounce.gain > 0.0;
   vec3 L;
   float dist;
-  vec3 E = lampAt(uKey, P, true, L, dist) * beamTransmittance(dist);
+  vec3 E = withGlow(lampAt(uKey, P, WALL_RAYS, L, dist), P.xy) * beamTransmittance(dist);
   float NdotL = max(L.z, 0.0);
   float a2 = pow(uRoughness, 4.0);
   vec3 H = normalize(L + V);
@@ -230,7 +264,7 @@ void main() {
   if (bounce) {
     vec3 Lb;
     float db;
-    vec3 Eb = lampAt(uBounce, P, false, Lb, db) * beamTransmittance(db);
+    vec3 Eb = lampAt(uBounce, P, 0.0, Lb, db) * beamTransmittance(db);
     lit += uAlbedo / PI * max(Lb.z, 0.0) * Eb;
   }
 
@@ -273,7 +307,7 @@ void main() {
     if (textMask > 0.002) {
       vec3 Lt;
       float dt;
-      vec3 Et = lampAt(uKey, vec3(c, 0.0), true, Lt, dt) * beamTransmittance(dt);
+      vec3 Et = lampAt(uKey, vec3(c, 0.0), WALL_RAYS, Lt, dt) * beamTransmittance(dt);
       textLit = vec3(0.85) / PI * max(Lt.z, 0.0) * Et * 0.25;
     }
   }
@@ -298,10 +332,10 @@ void main() {
 
         vec3 Ls;
         float ds;
-        vec3 Es = lampAt(uKey, X, true, Ls, ds) * beamTransmittance(ds);
+        vec3 Es = withGlow(lampAt(uKey, X, 1.0, Ls, ds), X.xy) * beamTransmittance(ds);
         vec3 inscatter = Es * phase(Ls.z);
         if (bounce) {
-          vec3 Eb = lampAt(uBounce, X, false, Ls, ds) * beamTransmittance(ds);
+          vec3 Eb = lampAt(uBounce, X, 0.0, Ls, ds) * beamTransmittance(ds);
           inscatter += Eb * phaseSoft(Ls.z);
         }
 

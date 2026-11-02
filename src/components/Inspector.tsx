@@ -42,6 +42,7 @@ const TUNING = [
   'spread',
   'diffusion',
   'softness',
+  'glow',
   'haze',
   'rays',
   'rayCount',
@@ -198,8 +199,9 @@ export function Inspector({
             {slider('expression', 'Выразительность')}
             {slider('brightness', 'Яркость', signed)}
             {slider('spread', 'Ширина луча')}
-            {look.brand === 'vk' && slider('diffusion', 'Рассеивание')}
+            {slider('diffusion', 'Рассеивание')}
             {slider('softness', 'Мягкость края')}
+            {slider('glow', 'Свечение источника')}
             {slider('haze', 'Дымка')}
             {slider('rays', 'Лучи', (v) => (v === 0 ? 'Нет' : percent(v)))}
             {look.rays > 0 && slider('rayCount', 'Сколько лучей', (v) => String(Math.round(v)))}

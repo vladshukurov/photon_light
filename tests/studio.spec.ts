@@ -59,7 +59,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'Положение источника' })).toHaveAttribute(
     'aria-valuetext',
-    'Сверху слева',
+    '-38°',
   );
   await page.getByRole('button', { name: 'Повторить', exact: true }).click();
   await page.getByRole('button', { name: 'Светлая', exact: true }).click();
@@ -103,7 +103,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   expect(errors).toEqual([]);
 });
 
-test('VK diffusion survives tone changes, undo and preset export', async ({ page }) => {
+test('diffusion survives tone and brand changes, undo and preset export', async ({ page }) => {
   await ready(page);
   const diffusion = page.getByRole('slider', { name: 'Рассеивание', exact: true });
   await expect(diffusion).toHaveAttribute('aria-valuenow', '0');
@@ -122,7 +122,7 @@ test('VK diffusion survives tone changes, undo and preset export', async ({ page
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(diffusion).toHaveAttribute('aria-valuenow', '1');
   await page.getByRole('button', { name: 'Музыка', exact: true }).click();
-  await expect(diffusion).toHaveCount(0);
+  await expect(diffusion).toHaveAttribute('aria-valuenow', '1');
 });
 
 test('drags the light on the canvas', async ({ page }) => {
@@ -146,67 +146,102 @@ test('drags the light on the canvas', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: 'Текст надписи' })).toHaveValue('');
 });
 
-test('calibrated VK light follows the Figma banner outside its lettering', async ({ page }) => {
-  await ready(page);
+/** Рендерит пресет в PNG нужного размера и сравнивает яркость с референсом вне надписей. */
+async function rmseAgainst(
+  page: Page,
+  look: Record<string, unknown>,
+  referencePath: string,
+  [w, h]: [number, number],
+  skip: (fx: number, fy: number) => boolean,
+) {
   await page.locator('input[type=file]').setInputFiles({
     name: 'calibration.json',
     mimeType: 'application/json',
-    buffer: Buffer.from(
-      // The banner enters at 32% of the top edge; default side presets stay at 22.5%.
-      JSON.stringify({
-        version: 3,
-        look: {
-          width: 1820,
-          height: 647,
-          grain: 0,
-          angle: (-Math.atan(0.36 / 0.55) * 180) / Math.PI,
-        },
-      }),
-    ),
+    buffer: Buffer.from(JSON.stringify({ version: 3, look })),
   });
   await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await customSize(dialog, 455, 162);
+  await customSize(dialog, w, h);
   const downloading = page.waitForEvent('download');
   await dialog.getByRole('button', { name: 'Скачать PNG', exact: true }).click();
   const actual = await readFile((await (await downloading).path())!);
-  const reference = await readFile('docs/references/ad-vk-white.png');
-  const rmse = await page.evaluate(
-    async ({ actual, reference }) => {
+  const reference = await readFile(referencePath);
+  const [a, b] = await page.evaluate(
+    async ({ actual, reference, w, h }) => {
       const decode = async (data: string) => {
         const img = new Image();
         img.src = `data:image/png;base64,${data}`;
         await img.decode();
         const canvas = document.createElement('canvas');
-        canvas.width = 455;
-        canvas.height = 162;
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, 455, 162);
-        return ctx.getImageData(0, 0, 455, 162).data;
+        ctx.drawImage(img, 0, 0, w, h);
+        return Array.from(ctx.getImageData(0, 0, w, h).data);
       };
-      const [a, b] = await Promise.all([decode(actual), decode(reference)]);
-      let squared = 0,
-        count = 0;
-      for (let y = 0; y < 162; y++)
-        for (let x = 0; x < 455; x++) {
-          // The generator renders light, not the banner's three blocks of copy.
-          if (
-            (x > 122 && x < 331 && y > 33 && y < 112) ||
-            (x > 170 && x < 285 && y > 108 && y < 130) ||
-            (x > 160 && x < 330 && y > 148)
-          )
-            continue;
-          const i = (y * 455 + x) * 4;
-          const delta = (a[i] + a[i + 1] + a[i + 2] - b[i] - b[i + 1] - b[i + 2]) / 3;
-          squared += delta * delta;
-          count++;
-        }
-      return Math.sqrt(squared / count);
+      return Promise.all([decode(actual), decode(reference)]);
     },
-    { actual: actual.toString('base64'), reference: reference.toString('base64') },
+    { actual: actual.toString('base64'), reference: reference.toString('base64'), w, h },
+  );
+  let squared = 0,
+    count = 0;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      // The generator renders light, not the banner's blocks of copy.
+      if (skip(x / w, y / h)) continue;
+      const i = (y * w + x) * 4;
+      const delta = (a[i] + a[i + 1] + a[i + 2] - b[i] - b[i + 1] - b[i + 2]) / 3;
+      squared += delta * delta;
+      count++;
+    }
+  return Math.sqrt(squared / count);
+}
+
+test('calibrated VK light follows the Figma banner outside its lettering', async ({ page }) => {
+  await ready(page);
+  const rmse = await rmseAgainst(
+    page,
+    {
+      width: 1820,
+      height: 647,
+      grain: 0,
+      // The banner enters at 32% of the top edge; default side presets stay at 22.5%.
+      angle: (-Math.atan(0.36 / 0.55) * 180) / Math.PI,
+      // Calibration of the guide profile: the setup before the art director's default.
+      distance: 1,
+      expression: 0,
+      brightness: 0,
+      spread: 0.5,
+      softness: 0.6,
+      glow: 0,
+      haze: 0.5,
+    },
+    'docs/references/ad-vk-white.png',
+    [455, 162],
+    (fx, fy) =>
+      (fx > 0.268 && fx < 0.727 && fy > 0.204 && fy < 0.691) ||
+      (fx > 0.374 && fx < 0.626 && fy > 0.667 && fy < 0.802) ||
+      (fx > 0.352 && fx < 0.725 && fy > 0.914),
   );
   // Old placement near the corner scores about 11; the calibrated beam is below 3.
   expect(rmse).toBeLessThan(4);
+});
+
+test('default VK light shows its source like the art director banner', async ({ page }) => {
+  await ready(page);
+  const banner = { width: 2000, height: 835, grain: 0 };
+  const outsideCopy = (fx: number, fy: number) =>
+    (fx > 0.22 && fx < 0.78 && fy > 0.24 && fy < 0.82) || (fx > 0.3 && fx < 0.7 && fy > 0.88);
+  const size: [number, number] = [480, 200];
+  const rmse = await rmseAgainst(
+    page,
+    banner,
+    'docs/references/ad-vk-source.png',
+    size,
+    outsideCopy,
+  );
+  // Without the source glow the edge stays dim and scores about 4.5; the default is near 2.6.
+  expect(rmse).toBeLessThan(3.6);
 });
 
 test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ page }) => {

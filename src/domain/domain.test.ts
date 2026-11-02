@@ -6,6 +6,7 @@ import {
   loopProgress,
   normalizeLook,
   parseLook,
+  RANGES,
   serializeLook,
   type Look,
 } from './look';
@@ -153,18 +154,19 @@ describe('one light rig', () => {
     }
   });
 
-  it('VK diffusion broadens the halo independently of tone and the main beam', () => {
-    for (const tone of ['mono', 'blue'] as const) {
-      const narrow = buildScene(look({ tone, diffusion: 0 }), 1);
-      const wide = buildScene(look({ tone, diffusion: 1 }), 1);
+  it('diffusion broadens the halo independently of brand, tone and the main beam', () => {
+    for (const [brand, tone] of [
+      ['vk', 'mono'],
+      ['vk', 'blue'],
+      ['music', 'mono'],
+    ] as const) {
+      const narrow = buildScene(look({ brand, tone, diffusion: 0 }), 1);
+      const wide = buildScene(look({ brand, tone, diffusion: 1 }), 1);
       expect(wide.light).toEqual(narrow.light);
       expect(wide.bounce.gain).toBeGreaterThan(narrow.bounce.gain * 10);
       expect(wide.bounce.coneHalf).toBeGreaterThan(wide.light.coneHalf);
     }
     expect(normalizeLook({ tone: 'blue' }).diffusion).toBe(0);
-    expect(buildScene(look({ brand: 'music', diffusion: 1 }), 1)).toEqual(
-      buildScene(look({ brand: 'music', diffusion: 0 }), 1),
-    );
   });
 
   it('VK mono is a white lamp with a faint white halo instead of a bounce', () => {
@@ -176,27 +178,65 @@ describe('one light rig', () => {
     expect(Math.max(...vk.albedo) - Math.min(...vk.albedo)).toBeLessThan(0.002);
   });
 
-  it('brand colour lives in the bounce; the lamp stays nearly white', () => {
+  it('sub-brands share the default VK rig and colour the beam, not the source', () => {
+    const spread = (c: number[]) => Math.max(...c) - Math.min(...c);
     const blue = buildScene(look({ brand: 'vk', tone: 'blue' }), 1);
-    const music = buildScene(look({ brand: 'music' }), 1);
-    for (const s of [blue, music]) {
-      expect(s.bounce.gain).toBeGreaterThan(0);
-      // Отлив — шире и мягче лампы: своего пятна у него нет.
-      expect(s.bounce.coneHalf).toBeGreaterThan(s.light.coneHalf);
-      expect(s.bounce.radius).toBeGreaterThan(s.light.radius);
-      // Ядро — почти белое: каналы лампы ближе друг к другу, чем у отлива.
-      const spread = (c: number[]) => Math.max(...c) - Math.min(...c);
-      expect(spread(s.light.color)).toBeLessThan(spread(s.bounce.color));
-    }
-    // Тон касается только VK.
-    expect(buildScene(look({ brand: 'music', tone: 'mono' }), 1)).toEqual(music);
-    // Геометрия и материал одинаковы у всех брендов и версий.
     const mono = buildScene(look({ brand: 'vk', tone: 'mono' }), 1);
-    for (const s of [blue, music]) {
+    // Синяя версия VK: лампа почти белая, цвет — в отливе.
+    expect(spread(blue.light.color)).toBeLessThan(spread(blue.bounce.color));
+    for (const brand of ['music', 'video', 'donut'] as const) {
+      const s = buildScene(look({ brand }), 1);
+      // Та же установка, что у VK: яркость, конус, геометрия и материал.
+      expect(s.light.gain).toBe(mono.light.gain);
+      expect(s.light.coneHalf).toBe(mono.light.coneHalf);
       expect(s.light.pos).toEqual(mono.light.pos);
       expect(s.light.dir).toEqual(mono.light.dir);
       expect(s.albedo).toEqual(mono.albedo);
+      // Отлив — шире и мягче лампы: своего пятна у него нет.
+      expect(s.bounce.coneHalf).toBeGreaterThan(s.light.coneHalf);
+      expect(s.bounce.radius).toBeGreaterThan(s.light.radius);
+      // Цвет бренда — в луче, а свечение источника белее луча.
+      expect(spread(s.light.color)).toBeGreaterThan(spread(blue.light.color));
+      expect(spread(s.glow.color)).toBeLessThan(spread(s.light.color));
+      // Тон касается только VK.
+      expect(buildScene(look({ brand, tone: 'blue' }), 1)).toEqual(s);
     }
+  });
+
+  it('source glow brightens toward white without moving the light', () => {
+    const off = buildScene(look({ glow: 0 }), 16 / 9);
+    const half = buildScene(look({ glow: 0.5 }), 16 / 9);
+    const full = buildScene(look({ glow: 1 }), 16 / 9);
+    expect(off.glow.gain).toBe(0);
+    expect(half.glow.gain).toBeGreaterThan(0);
+    expect(full.glow.gain).toBeGreaterThan(half.glow.gain * 4);
+    expect(full.light).toEqual(off.light);
+    expect(full.glow.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
+    // Свечение прижато к краю со стороны источника, а не висит в кадре.
+    const [hw, hh] = frameHalf(16 / 9);
+    const [x, y] = half.glow.pos;
+    expect(Math.max(Math.abs(x) / hw, Math.abs(y) / hh)).toBeGreaterThan(1);
+    expect(Math.sign(x)).toBe(Math.sign(half.light.pos[0]));
+  });
+
+  it('starts from the art director setup: a visible source with light haze', () => {
+    expect(DEFAULT_LOOK).toMatchObject({
+      brand: 'vk',
+      tone: 'mono',
+      angle: -38,
+      distance: 1.75,
+      expression: 0.18,
+      brightness: 0.36,
+      spread: 0.19,
+      diffusion: 0,
+      softness: 0.5,
+      glow: 0.5,
+      haze: 0.29,
+      rays: 0,
+    });
+    // Дефолты ползунков совпадают с дефолтным светом: «Сбросить» возвращает к нему.
+    for (const key of Object.keys(RANGES) as (keyof typeof RANGES)[])
+      expect(RANGES[key].def).toBe(DEFAULT_LOOK[key]);
   });
 
   it('switching room keeps the light placement', () => {

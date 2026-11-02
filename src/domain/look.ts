@@ -35,9 +35,11 @@ export interface Look {
   expression: number;
   brightness: number;
   spread: number;
-  /** Сила широкого ореола VK, независимо от цвета света. */
+  /** Сила широкого ореола, независимо от цвета света. */
   diffusion: number;
   softness: number;
+  /** Свечение самого источника у края кадра: больше — ярче и белее. */
+  glow: number;
   rays: number;
   rayCount: number;
   haze: number;
@@ -72,38 +74,44 @@ interface Range {
 }
 /** Диапазоны числовых полей. Из них же — ползунки, валидация и дефолты. */
 export const RANGES = {
-  angle: { min: -180, max: 180, def: -45 },
-  distance: { min: 0.2, max: 2, def: 1 },
-  expression: { min: 0, max: 1, def: 0 },
-  brightness: { min: -1, max: 1, def: 0 },
+  angle: { min: -180, max: 180, def: -38 },
+  distance: { min: 0.2, max: 2, def: 1.75 },
+  expression: { min: 0, max: 1, def: 0.18 },
+  brightness: { min: -1, max: 1, def: 0.36 },
   diffusion: { min: 0, max: 1, def: 0 },
-  spread: { min: 0, max: 1, def: 0.5 },
-  softness: { min: 0, max: 1, def: 0.6 },
+  spread: { min: 0, max: 1, def: 0.19 },
+  softness: { min: 0, max: 1, def: 0.5 },
+  glow: { min: 0, max: 1, def: 0.5 },
   rays: { min: 0, max: 1, def: 0 },
   rayCount: { min: 3, max: 16, def: 7 },
-  haze: { min: 0, max: 1, def: 0.5 },
+  haze: { min: 0, max: 1, def: 0.29 },
   grain: { min: 0, max: 1, def: 0.4 },
   textSize: { min: 0.05, max: 0.4, def: 0.14 },
 } satisfies Record<string, Range>;
 export type NumericKey = keyof typeof RANGES;
 
+/*
+  Дефолт — установка арт-директора: источник сверху слева, чуть дальше
+  от края, чем у направлений гайда, видимое свечение у края и лёгкая дымка.
+*/
 export const DEFAULT_LOOK: Look = {
   name: 'Новый свет',
   brand: 'vk',
   tone: 'mono',
   room: 'dark',
-  angle: -45,
-  distance: 1,
+  angle: -38,
+  distance: 1.75,
   width: 1920,
   height: 1080,
-  expression: 0,
-  brightness: 0,
-  spread: 0.5,
+  expression: 0.18,
+  brightness: 0.36,
+  spread: 0.19,
   diffusion: 0,
-  softness: 0.6,
+  softness: 0.5,
+  glow: 0.5,
   rays: 0,
   rayCount: 7,
-  haze: 0.5,
+  haze: 0.29,
   grain: 0.4,
   text: '',
   textSize: 0.14,
@@ -143,7 +151,8 @@ export function normalizeLook(raw: unknown): Look {
   if (src.room === 'dark' || src.room === 'light') look.room = src.room;
   if (src.tone === 'mono' || src.tone === 'blue') look.tone = src.tone;
   if (typeof src.text === 'string') look.text = src.text.slice(0, 120);
-  // Файлы с переключателем «характер» (до ползунка): vivid — это выразительность 100%.
+  // Файлы с переключателем «характер» (до ползунка): guide — 0%, vivid — 100%.
+  if (src.character === 'guide') look.expression = 0;
   if (src.character === 'vivid') look.expression = 1;
   for (const key of Object.keys(RANGES) as NumericKey[]) {
     const v = src[key];
