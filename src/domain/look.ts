@@ -74,44 +74,45 @@ interface Range {
 }
 /** Диапазоны числовых полей. Из них же — ползунки, валидация и дефолты. */
 export const RANGES = {
-  angle: { min: -180, max: 180, def: -38 },
-  distance: { min: 0.2, max: 2, def: 1.75 },
-  expression: { min: 0, max: 1, def: 0.18 },
+  angle: { min: -180, max: 180, def: -44 },
+  distance: { min: 0.2, max: 2, def: 1.25 },
+  expression: { min: 0, max: 1, def: 0 },
   brightness: { min: -1, max: 1, def: 0.36 },
   diffusion: { min: 0, max: 1, def: 0 },
-  spread: { min: 0, max: 1, def: 0.19 },
-  softness: { min: 0, max: 1, def: 0.5 },
+  spread: { min: 0, max: 1, def: 0.64 },
+  softness: { min: 0, max: 1, def: 0 },
   glow: { min: 0, max: 1, def: 0.5 },
   rays: { min: 0, max: 1, def: 0 },
   rayCount: { min: 3, max: 16, def: 7 },
-  haze: { min: 0, max: 1, def: 0.29 },
+  haze: { min: 0, max: 1, def: 0.13 },
   grain: { min: 0, max: 1, def: 0.4 },
   textSize: { min: 0.05, max: 0.4, def: 0.14 },
 } satisfies Record<string, Range>;
 export type NumericKey = keyof typeof RANGES;
 
 /*
-  Дефолт — установка арт-директора: источник сверху слева, чуть дальше
-  от края, чем у направлений гайда, видимое свечение у края и лёгкая дымка.
+  Дефолт — установка арт-директора, подобранная по баннеру (Figma 16944:36):
+  источник сверху слева, широкий мягкий луч, пятно источника у края и
+  лёгкая дымка.
 */
 export const DEFAULT_LOOK: Look = {
   name: 'Новый свет',
   brand: 'vk',
   tone: 'mono',
   room: 'dark',
-  angle: -38,
-  distance: 1.75,
+  angle: -44,
+  distance: 1.25,
   width: 1920,
   height: 1080,
-  expression: 0.18,
+  expression: 0,
   brightness: 0.36,
-  spread: 0.19,
+  spread: 0.64,
   diffusion: 0,
-  softness: 0.5,
+  softness: 0,
   glow: 0.5,
   rays: 0,
   rayCount: 7,
-  haze: 0.29,
+  haze: 0.13,
   grain: 0.4,
   text: '',
   textSize: 0.14,

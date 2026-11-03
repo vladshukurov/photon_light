@@ -209,7 +209,7 @@ describe('one light rig', () => {
     const full = buildScene(look({ glow: 1 }), 16 / 9);
     expect(off.glow.gain).toBe(0);
     expect(half.glow.gain).toBeGreaterThan(0);
-    expect(full.glow.gain).toBeGreaterThan(half.glow.gain * 4);
+    expect(full.glow.gain).toBeCloseTo(half.glow.gain * 4);
     expect(full.light).toEqual(off.light);
     expect(full.glow.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
     // Свечение прижато к краю со стороны источника, а не висит в кадре.
@@ -219,19 +219,19 @@ describe('one light rig', () => {
     expect(Math.sign(x)).toBe(Math.sign(half.light.pos[0]));
   });
 
-  it('starts from the art director setup: a visible source with light haze', () => {
+  it('starts from the art director setup: a soft wide beam from a visible source', () => {
     expect(DEFAULT_LOOK).toMatchObject({
       brand: 'vk',
       tone: 'mono',
-      angle: -38,
-      distance: 1.75,
-      expression: 0.18,
+      angle: -44,
+      distance: 1.25,
+      expression: 0,
       brightness: 0.36,
-      spread: 0.19,
+      spread: 0.64,
       diffusion: 0,
-      softness: 0.5,
+      softness: 0,
       glow: 0.5,
-      haze: 0.29,
+      haze: 0.13,
       rays: 0,
     });
     // Дефолты ползунков совпадают с дефолтным светом: «Сбросить» возвращает к нему.

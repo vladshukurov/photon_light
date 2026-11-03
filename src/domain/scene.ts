@@ -29,7 +29,7 @@ export interface Scene {
   light: Lamp;
   /** Отлив — свет лампы, отражённый цветной стеной за кадром; в ч/б — слабый белый ореол луча. */
   bounce: Lamp;
-  /** Свечение источника: луч ярче и белее у входа в кадр. gain — добавка к лучу в центре. */
+  /** Свечение источника: мягкое круглое пятно прибора у края кадра, в линейном свете. */
   glow: { pos: [number, number]; color: Vec3; gain: number; radius: number };
   albedo: Vec3;
   ambient: Vec3;
@@ -128,11 +128,14 @@ const RIG = {
     decay: 0.3,
   },
   /**
-   * Свечение источника: у края кадра читается сам прибор, как в макете
-   * баннера. Центр — во входе луча, чуть за краем. Добавка растёт как куб
-   * ползунка: 50% — макет, 100% — ядро уходит в белый.
+   * Свечение источника: у края кадра круглое мягкое пятно прибора, из
+   * которого выходит луч, как в макете баннера (Figma 16944:36). Центр — во
+   * входе луча, чуть за краем; радиус — в коротких сторонах; сила — доля
+   * мощности лампы и растёт как квадрат ползунка: больше — ярче и белее.
    */
-  glow: { out: 0.05, radius: 0.35, gain: 8, keyTint: 0.15 },
+  glow: { out: 0.05, radius: 0.15, gain: 0.006, keyTint: 0.15 },
+  /** Мягкость края конуса: от 0.85 до 1 — край луча растворяется, как в макете. */
+  softness: { base: 0.85, span: 0.15 },
 };
 
 /** Цвет света, нормированный по яркости: окраска не меняет экспозицию. */
@@ -326,7 +329,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       dir,
       color: tint(brand.accent, vk ? (colored ? RIG.keyTint : 0) : RIG.brandTint),
       coneHalf: coneDeg * DEG,
-      softness: Math.min(1, 0.6 + look.softness * 0.65),
+      softness: RIG.softness.base + look.softness * RIG.softness.span,
       gain,
       radius: RIG.radius,
       decay: RIG.decay,
@@ -335,7 +338,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     glow: {
       pos: [ex + nx * RIG.glow.out, ey + ny * RIG.glow.out],
       color: tint(brand.accent, colored ? RIG.glow.keyTint : 0),
-      gain: RIG.glow.gain * look.glow ** 3,
+      gain: gain * RIG.glow.gain * look.glow ** 2,
       radius: RIG.glow.radius,
     },
     albedo,

@@ -59,7 +59,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'Положение источника' })).toHaveAttribute(
     'aria-valuetext',
-    '-38°',
+    '-44°',
   );
   await page.getByRole('button', { name: 'Повторить', exact: true }).click();
   await page.getByRole('button', { name: 'Светлая', exact: true }).click();
@@ -146,13 +146,18 @@ test('drags the light on the canvas', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: 'Текст надписи' })).toHaveValue('');
 });
 
-/** Рендерит пресет в PNG нужного размера и сравнивает яркость с референсом вне надписей. */
+/**
+ * Рендерит пресет в PNG и сравнивает яркость с референсом размера [w, h] вне надписей.
+ * С `exportSize` кадр другой пропорции вписывается по высоте в центр референса
+ * на фон баннера — так дизайнер сверяет экспорт 16:9 с баннером в Figma.
+ */
 async function rmseAgainst(
   page: Page,
   look: Record<string, unknown>,
   referencePath: string,
   [w, h]: [number, number],
   skip: (fx: number, fy: number) => boolean,
+  exportSize: [number, number] = [w, h],
 ) {
   await page.locator('input[type=file]').setInputFiles({
     name: 'calibration.json',
@@ -161,14 +166,16 @@ async function rmseAgainst(
   });
   await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await customSize(dialog, w, h);
+  await customSize(dialog, ...exportSize);
   const downloading = page.waitForEvent('download');
   await dialog.getByRole('button', { name: 'Скачать PNG', exact: true }).click();
   const actual = await readFile((await (await downloading).path())!);
   const reference = await readFile(referencePath);
+  const pw = Math.round((exportSize[0] * h) / exportSize[1]);
+  const x0 = Math.round((w - pw) / 2);
   const [a, b] = await page.evaluate(
-    async ({ actual, reference, w, h }) => {
-      const decode = async (data: string) => {
+    async ({ actual, reference, w, h, x0, pw }) => {
+      const decode = async (data: string, x: number, width: number) => {
         const img = new Image();
         img.src = `data:image/png;base64,${data}`;
         await img.decode();
@@ -176,17 +183,19 @@ async function rmseAgainst(
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, w, h);
+        ctx.fillStyle = '#020202';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, x, 0, width, h);
         return Array.from(ctx.getImageData(0, 0, w, h).data);
       };
-      return Promise.all([decode(actual), decode(reference)]);
+      return Promise.all([decode(actual, x0, pw), decode(reference, 0, w)]);
     },
-    { actual: actual.toString('base64'), reference: reference.toString('base64'), w, h },
+    { actual: actual.toString('base64'), reference: reference.toString('base64'), w, h, x0, pw },
   );
   let squared = 0,
     count = 0;
   for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
+    for (let x = Math.max(0, x0); x < Math.min(w, x0 + pw); x++) {
       // The generator renders light, not the banner's blocks of copy.
       if (skip(x / w, y / h)) continue;
       const i = (y * w + x) * 4;
@@ -227,21 +236,20 @@ test('calibrated VK light follows the Figma banner outside its lettering', async
   expect(rmse).toBeLessThan(4);
 });
 
-test('default VK light shows its source like the art director banner', async ({ page }) => {
+test('default VK light matches the art director banner as a soft spotlight', async ({ page }) => {
   await ready(page);
-  const banner = { width: 2000, height: 835, grain: 0 };
-  const outsideCopy = (fx: number, fy: number) =>
-    (fx > 0.22 && fx < 0.78 && fy > 0.24 && fy < 0.82) || (fx > 0.3 && fx < 0.7 && fy > 0.88);
-  const size: [number, number] = [480, 200];
+  // Light only, without copy (Figma 17015:24). The default 16:9 export is fitted
+  // to the banner's height, the way the designer compares them in Figma.
   const rmse = await rmseAgainst(
     page,
-    banner,
-    'docs/references/ad-vk-source.png',
-    size,
-    outsideCopy,
+    { grain: 0 },
+    'docs/references/ad-vk-light.png',
+    [455, 162],
+    () => false,
+    [288, 162],
   );
-  // Without the source glow the edge stays dim and scores about 4.5; the default is near 2.6.
-  expect(rmse).toBeLessThan(3.6);
+  // The flat wide beam without the source spot scores 3.4; the spotlight is near 2.5.
+  expect(rmse).toBeLessThan(3);
 });
 
 test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ page }) => {

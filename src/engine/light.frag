@@ -52,7 +52,7 @@ struct Lamp {
 uniform Lamp uKey;
 uniform Lamp uBounce;
 
-// Свечение источника: луч ярче и белее у входа в кадр — виден сам прибор.
+// Свечение источника: мягкое круглое пятно прибора у края кадра.
 uniform vec2  uGlowPos;
 uniform vec3  uGlowColor;
 uniform float uGlowGain;
@@ -189,21 +189,6 @@ vec3 lampAt(Lamp lamp, vec3 X, float rays, out vec3 L, out float dist) {
   return lamp.color * (lamp.gain * atten * profile * mask);
 }
 
-/*
-  Свечение источника. У входа луча свет плотнее: дымка у прибора светится
-  сама, и у края кадра читается источник, а не только его свет на стене.
-  Это усиление того же луча, а не отдельное пятно, поэтому форма захода
-  света не меняется и мимо луча ничего не светится. Добавка — цвета свечения
-  (почти белого), поэтому сильное свечение уходит в белый. Спад — лоренциан
-  от точки чуть за краем: ядро прижато к краю и растворяется без границы.
-*/
-vec3 withGlow(vec3 E, vec2 p) {
-  if (uGlowGain <= 0.0) return E;
-  float q = length(p - uGlowPos) / uGlowRadius;
-  float s = dot(E, vec3(0.2126, 0.7152, 0.0722));
-  return E + uGlowColor * (s * uGlowGain / (1.0 + q * q));
-}
-
 float hg(float cosA, float g) {
   float g2 = g * g;
   return (1.0 - g2) / (4.0 * PI * pow(max(1.0 + g2 - 2.0 * g * cosA, 1e-4), 1.5));
@@ -255,7 +240,7 @@ void main() {
   bool bounce = uBounce.gain > 0.0;
   vec3 L;
   float dist;
-  vec3 E = withGlow(lampAt(uKey, P, WALL_RAYS, L, dist), P.xy) * beamTransmittance(dist);
+  vec3 E = lampAt(uKey, P, WALL_RAYS, L, dist) * beamTransmittance(dist);
   float NdotL = max(L.z, 0.0);
   float a2 = pow(uRoughness, 4.0);
   vec3 H = normalize(L + V);
@@ -332,7 +317,7 @@ void main() {
 
         vec3 Ls;
         float ds;
-        vec3 Es = withGlow(lampAt(uKey, X, 1.0, Ls, ds), X.xy) * beamTransmittance(ds);
+        vec3 Es = lampAt(uKey, X, 1.0, Ls, ds) * beamTransmittance(ds);
         vec3 inscatter = Es * phase(Ls.z);
         if (bounce) {
           vec3 Eb = lampAt(uBounce, X, 0.0, Ls, ds) * beamTransmittance(ds);
@@ -358,6 +343,17 @@ void main() {
   if (uVignette > 0.0001) {
     float r = length(c - uKey.pos.xy);
     vig = mix(1.0, 1.0 / (1.0 + r * r * 0.55), uVignette);
+  }
+
+  /*
+    Свечение источника — как в макете баннера (Figma 16944:36): у края кадра
+    круглое мягкое пятно самого прибора, из которого выходит луч. Это
+    светящийся воздух у лампы, поэтому оно идёт в слой дымки. Спад гауссов:
+    пятно компактное, без длинного хвоста вбок, и луч под ним остаётся уже.
+  */
+  if (uGlowGain > 0.0) {
+    float q = length(c - uGlowPos) / uGlowRadius;
+    haze += uGlowColor * (uGlowGain * exp(-q * q));
   }
 
   vec3 base = ambient * T + airlight;
