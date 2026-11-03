@@ -310,12 +310,12 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const ambient: Vec3 = dark ? [0, 0, 0] : solveAmbient(LIGHT_ROOM.floor, wall, saturation);
 
   // Цвет бренда: у VK — только в синей версии, у сабрендов — всегда.
-  // Установка у всех брендов одна — дефолтная VK; бренд меняет только цвет
-  // и силу отлива.
+  // Установка и яркость у всех брендов одни — дефолтная VK; бренд меняет
+  // только цвет и силу отлива.
   const colored = brand.id !== 'vk' || look.tone === 'blue';
   const ev = (dark ? RIG.ev : RIG.evLight) + profile.ev + look.brightness * 1.6;
   const vk = brand.id === 'vk';
-  const gain = Math.pow(2, ev + RIG.vkEv + brand.ev);
+  const gain = Math.pow(2, ev + RIG.vkEv);
   const b = RIG.bounce;
   // Отлив — широкий мягкий луч по той же оси с центром во входе луча, как
   // фоновое свечение синего баннера; дальше по оси он съехал бы вбок пятном.

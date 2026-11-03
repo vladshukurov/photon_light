@@ -13,7 +13,7 @@ import {
 import { buildScene, edgePoint, frameHalf, sourceFromFrame, sourceOnFrame } from './scene';
 import { historyReducer, initialHistory, restoreLook, STORAGE_KEY } from './history';
 import { aces, luma, solveAmbient, trimInverse } from './tone';
-import { BRANDS, brandById, LIGHT_ROOM } from './brands';
+import { BRANDS, LIGHT_ROOM } from './brands';
 import { safeFilename, validateSize } from '../engine/export';
 
 const look = (patch: Partial<Look> = {}): Look => normalizeLook({ ...DEFAULT_LOOK, ...patch });
@@ -186,10 +186,9 @@ describe('one light rig', () => {
     expect(spread(blue.light.color)).toBeLessThan(spread(blue.bounce.color));
     for (const brand of ['music', 'video', 'donut'] as const) {
       const s = buildScene(look({ brand }), 1);
-      // Та же установка, что у VK: конус, геометрия и материал; яркость —
-      // с поправкой бренда, снятой с его баннера (свет там приглушённее).
-      expect(s.light.gain).toBeCloseTo(mono.light.gain * 2 ** brandById(brand).ev);
-      expect(s.light.gain).toBeLessThan(mono.light.gain);
+      // Та же установка, что у VK: яркость, конус, геометрия и материал —
+      // сабренды отличаются друг от друга только цветом.
+      expect(s.light.gain).toBe(mono.light.gain);
       expect(s.light.coneHalf).toBe(mono.light.coneHalf);
       expect(s.light.pos).toEqual(mono.light.pos);
       expect(s.light.dir).toEqual(mono.light.dir);
