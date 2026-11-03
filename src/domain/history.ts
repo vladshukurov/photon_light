@@ -64,11 +64,24 @@ export const initialHistory = (present: Look): History => ({
 
 // --- автосохранение ------------------------------------------------------
 
-export const STORAGE_KEY = 'photon:look:v3';
+/*
+  Версия ключа поднимается, когда меняется дефолтный свет и все должны начать
+  с него: прежнее автосохранение больше не читается и удаляется. v4 — свет
+  направлений гайда (ноябрь 2026).
+*/
+export const STORAGE_KEY = 'photon:look:v4';
+const LEGACY_KEYS = ['photon:look:v3'];
 
 export function restoreLook(
-  storage: Pick<Storage, 'getItem'> | undefined = globalThis.localStorage,
+  storage:
+    | (Pick<Storage, 'getItem'> & Partial<Pick<Storage, 'removeItem'>>)
+    | undefined = globalThis.localStorage,
 ): Look {
+  try {
+    for (const key of LEGACY_KEYS) storage?.removeItem?.(key);
+  } catch {
+    // Хранилище может быть недоступно — это не повод не открыть сцену.
+  }
   try {
     const text = storage?.getItem(STORAGE_KEY);
     if (text) return normalizeLook(JSON.parse(text));

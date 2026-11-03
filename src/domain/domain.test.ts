@@ -348,6 +348,17 @@ describe('history and storage', () => {
       }),
     ).toEqual(DEFAULT_LOOK);
   });
+
+  it('starts everyone from the new default once the storage key is bumped', () => {
+    const store = new Map([['photon:look:v3', JSON.stringify(look({ brightness: 0.36 }))]]);
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      removeItem: (k: string) => void store.delete(k),
+    };
+    expect(STORAGE_KEY).not.toBe('photon:look:v3');
+    expect(restoreLook(storage)).toEqual(DEFAULT_LOOK);
+    expect(store.has('photon:look:v3')).toBe(false);
+  });
 });
 
 describe('export boundary', () => {

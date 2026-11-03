@@ -79,7 +79,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const saved = localStorage.getItem('photon:look:v3');
+        const saved = localStorage.getItem('photon:look:v4');
         return saved ? JSON.parse(saved).rays : null;
       }),
     )
