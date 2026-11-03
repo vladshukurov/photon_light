@@ -66,8 +66,8 @@ interface Profile {
 */
 const PROFILES: Record<Look['room'], [guide: Profile, vivid: Profile]> = {
   dark: [
-    { ev: -0.8, cone: 1, haze: 1.35, bloom: 0.14, threshold: 0.22, saturation: 1.5 },
-    { ev: 0.05, cone: 3, haze: 2.025, bloom: 0.4, threshold: 0.18, saturation: 1.7 },
+    { ev: -0.8, cone: 1, haze: 1, bloom: 0.14, threshold: 0.22, saturation: 1.5 },
+    { ev: 0.05, cone: 3, haze: 1.5, bloom: 0.4, threshold: 0.18, saturation: 1.7 },
   ],
   light: [
     { ev: 2.0, cone: 1, haze: 0.8, bloom: 0.2, threshold: 0, saturation: 1 },
@@ -96,19 +96,14 @@ function profileAt(room: Look['room'], t: number): Profile {
 const RIG = {
   /** Высота лампы над стеной. */
   height: 0.1,
-  /**
-   * Куда ось падает на стену: на столько коротких сторон вглубь от края.
-   * Глубоко — как в баннере, свет тянется до низа кадра и там расплывается,
-   * а не собирается плотной полосой под источником.
-   */
-  reach: 1.5,
+  /** Куда ось падает на стену: на столько коротких сторон вглубь от края. */
+  reach: 0.6,
   /** Размер излучателя: чем больше, тем мягче заход света у края. */
   radius: 0.08,
-  /** Затухание по пути: слабое, чтобы свет доходил до низа кадра, как в баннере. */
-  decay: 0.15,
-  ev: 3.4,
-  // Слабое затухание добавило света вдали — светлая комната компенсирована.
-  evLight: 2.8,
+  /** Затухание по пути: свет — компактное свечение у края, а не заливка кадра. */
+  decay: 0.5,
+  ev: 3.55,
+  evLight: 3.1,
   /** Сколько цвета в лампе синей версии VK: луч остаётся почти белым. */
   keyTint: 0.4,
   /** У сабрендов цвет бренда — в самом луче, как у синей версии VK, только плотнее. */
@@ -139,8 +134,10 @@ const RIG = {
    * мощности лампы и растёт как квадрат ползунка: больше — ярче и белее.
    */
   glow: { out: 0.05, radius: 0.15, gain: 0.006, keyTint: 0.15 },
-  /** Мягкость края конуса: от 0.85 до 1 — край луча растворяется, как в макете. */
-  softness: { base: 0.85, span: 0.15 },
+  /** Мягкость края конуса. */
+  softness: { base: 0.6, span: 0.65 },
+  /** Конус лампы в градусах: база и прибавка ползунка «Ширина луча». */
+  cone: { base: 4, spread: 12 },
 };
 
 /** Цвет света, нормированный по яркости: окраска не меняет экспозицию. */
@@ -188,9 +185,9 @@ export function sourceOnFrame(
 }
 
 /** Насколько источник по умолчанию стоит за краем кадра (в коротких сторонах). */
-const OUT = 0.55;
+const OUT = 0.5;
 /** Наклон оси луча к центру кадра: 0 — строго по нормали к краю, 1 — к центру. */
-const TILT = 0.76;
+const TILT = 0.65;
 
 /*
   Нормаль к краю в точке (ex, ey), с наклоном к центру кадра на долю tilt.
@@ -294,7 +291,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     normalize([ex - ax * reach - lamp[0], ey - ay * reach - lamp[1], -lamp[2]]);
   const dir = aim(pos, RIG.reach);
 
-  const coneDeg = 2.6 + look.spread * 12 + profile.cone;
+  const coneDeg = RIG.cone.base + look.spread * RIG.cone.spread + profile.cone;
 
   const saturation = profile.saturation;
   const wall = dark ? DARK_WALL : LIGHT_ROOM.wall;
@@ -334,7 +331,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       dir,
       color: tint(brand.accent, vk ? (colored ? RIG.keyTint : 0) : RIG.brandTint),
       coneHalf: coneDeg * DEG,
-      softness: RIG.softness.base + look.softness * RIG.softness.span,
+      softness: Math.min(1, RIG.softness.base + look.softness * RIG.softness.span),
       gain,
       radius: RIG.radius,
       decay: RIG.decay,

@@ -219,19 +219,19 @@ describe('one light rig', () => {
     expect(Math.sign(x)).toBe(Math.sign(half.light.pos[0]));
   });
 
-  it('starts from the art director setup: a soft wide beam from a visible source', () => {
+  it('starts from the light of the six guide directions', () => {
     expect(DEFAULT_LOOK).toMatchObject({
       brand: 'vk',
       tone: 'mono',
-      angle: -44,
-      distance: 1.25,
+      angle: -45,
+      distance: 1,
       expression: 0,
-      brightness: 0.36,
-      spread: 0.64,
+      brightness: 0,
+      spread: 0.5,
       diffusion: 0,
-      softness: 0,
-      glow: 0.5,
-      haze: 0.13,
+      softness: 0.6,
+      glow: 0,
+      haze: 0.5,
       rays: 0,
     });
     // Дефолты ползунков совпадают с дефолтным светом: «Сбросить» возвращает к нему.

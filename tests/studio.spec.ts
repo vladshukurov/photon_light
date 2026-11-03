@@ -59,7 +59,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'Положение источника' })).toHaveAttribute(
     'aria-valuetext',
-    '-44°',
+    'Сверху слева',
   );
   await page.getByRole('button', { name: 'Повторить', exact: true }).click();
   await page.getByRole('button', { name: 'Светлая', exact: true }).click();
@@ -236,7 +236,7 @@ test('calibrated VK light follows the Figma banner outside its lettering', async
   expect(rmse).toBeLessThan(4);
 });
 
-test('default VK light matches the art director banner as a soft spotlight', async ({ page }) => {
+test('default VK light stays close to the art director banner', async ({ page }) => {
   await ready(page);
   // Light only, without copy (Figma 17015:24). The default 16:9 export is fitted
   // to the banner's height, the way the designer compares them in Figma.
@@ -248,7 +248,7 @@ test('default VK light matches the art director banner as a soft spotlight', asy
     () => false,
     [288, 162],
   );
-  // The flat wide beam without the source spot scores 3.4; the spotlight is near 2.5.
+  // A dense stripe along the wall or a frame filled with light goes well above 3.
   expect(rmse).toBeLessThan(3);
 });
 
