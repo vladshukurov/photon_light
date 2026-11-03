@@ -17,7 +17,8 @@ export interface Lamp {
   dir: Vec3;
   color: Vec3;
   coneHalf: number;
-  softness: number;
+  /** Степень края конуса (обобщённый гаусс): 1 — гаусс, больше — резче, меньше — мягче. */
+  edge: number;
   gain: number;
   radius: number;
   /** Затухание по пути, на короткую сторону кадра. */
@@ -131,11 +132,15 @@ const RIG = {
    * Свечение источника: у края кадра круглое мягкое пятно прибора, из
    * которого выходит луч, как в макете баннера (Figma 16944:36). Центр — во
    * входе луча, чуть за краем; радиус — в коротких сторонах; сила — доля
-   * мощности лампы и растёт как квадрат ползунка: больше — ярче и белее.
+   * мощности лампы и растёт с ползунком линейно: больше — ярче и белее.
    */
-  glow: { out: 0.05, radius: 0.15, gain: 0.006, keyTint: 0.15 },
-  /** Мягкость края конуса. */
-  softness: { base: 0.6, span: 0.65 },
+  glow: { out: 0.05, radius: 0.15, gain: 0.03, keyTint: 0.15 },
+  /**
+   * Мягкость края: степень обобщённого гаусса от 2.5 (резкий край) через 1
+   * (гаусс, на 50%) до 0.4 (край растворяется длинными хвостами) — ползунок
+   * работает на всём ходе, без мёртвой зоны.
+   */
+  edge: { sharp: 2.5 },
   /** Конус лампы в градусах: база и прибавка ползунка «Ширина луча». */
   cone: { base: 4, spread: 12 },
 };
@@ -317,7 +322,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     dir: aim(bPos, b.reach),
     color: tint(brand.accent, colored ? 1 : 0),
     coneHalf: b.cone * DEG,
-    softness: 1,
+    edge: 1,
     gain: gain * bounceGain,
     radius: b.radius,
     decay: b.decay,
@@ -331,7 +336,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       dir,
       color: tint(brand.accent, vk ? (colored ? RIG.keyTint : 0) : RIG.brandTint),
       coneHalf: coneDeg * DEG,
-      softness: Math.min(1, RIG.softness.base + look.softness * RIG.softness.span),
+      edge: RIG.edge.sharp ** (1 - 2 * look.softness),
       gain,
       radius: RIG.radius,
       decay: RIG.decay,
@@ -340,7 +345,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     glow: {
       pos: [ex + nx * RIG.glow.out, ey + ny * RIG.glow.out],
       color: tint(brand.accent, colored ? RIG.glow.keyTint : 0),
-      gain: gain * RIG.glow.gain * look.glow ** 2,
+      gain: gain * RIG.glow.gain * look.glow,
       radius: RIG.glow.radius,
     },
     albedo,

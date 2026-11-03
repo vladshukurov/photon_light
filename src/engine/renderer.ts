@@ -194,7 +194,7 @@ export class Renderer {
         .float(`${name}.radius`, lamp.radius)
         .float(`${name}.decay`, lamp.decay)
         .float(`${name}.coneHalf`, lamp.coneHalf)
-        .float(`${name}.coneSoft`, lamp.softness);
+        .float(`${name}.edge`, lamp.edge);
     }
     prog
       .vec2('uResolution', w, h)

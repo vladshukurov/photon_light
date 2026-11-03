@@ -209,7 +209,7 @@ describe('one light rig', () => {
     const full = buildScene(look({ glow: 1 }), 16 / 9);
     expect(off.glow.gain).toBe(0);
     expect(half.glow.gain).toBeGreaterThan(0);
-    expect(full.glow.gain).toBeCloseTo(half.glow.gain * 4);
+    expect(full.glow.gain).toBeCloseTo(half.glow.gain * 2);
     expect(full.light).toEqual(off.light);
     expect(full.glow.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
     // Свечение прижато к краю со стороны источника, а не висит в кадре.
@@ -229,7 +229,7 @@ describe('one light rig', () => {
       brightness: 0,
       spread: 0.5,
       diffusion: 0,
-      softness: 0.6,
+      softness: 0.5,
       glow: 0,
       haze: 0.5,
       rays: 0,

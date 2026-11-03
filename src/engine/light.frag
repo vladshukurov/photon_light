@@ -47,7 +47,7 @@ struct Lamp {
   float radius;    // размер излучателя: чем больше, тем мягче пятно у края
   float decay;     // затухание по пути: свет не доходит до дальнего края кадра
   float coneHalf;
-  float coneSoft;  // 0 — резкий край, 1 — широкая полутень
+  float edge;      // степень края конуса: 1 — гаусс, больше — резче, меньше — длинные хвосты
 };
 uniform Lamp uKey;
 uniform Lamp uBounce;
@@ -182,7 +182,7 @@ vec3 lampAt(Lamp lamp, vec3 X, float rays, out vec3 L, out float dist) {
 
   // Обобщённый гаусс: мягкость — это степень, а не ширина. Яркость центра не меняется.
   float w = max(lamp.coneHalf + atan(r / max(dist, 1e-3)), 1e-3);
-  float n = 1.0 + 4.0 * (1.0 - lamp.coneSoft) * (1.0 - lamp.coneSoft);
+  float n = lamp.edge;
   float profile = exp(-0.693147 * pow(max(theta / w, 1e-4), 2.0 * n));
 
   float mask = rays > 0.0 ? rayMask(X, rays) : 1.0;
