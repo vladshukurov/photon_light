@@ -79,7 +79,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const saved = localStorage.getItem('photon:look:v4');
+        const saved = localStorage.getItem('photon:look:v5');
         return saved ? JSON.parse(saved).rays : null;
       }),
     )
@@ -110,13 +110,17 @@ test('diffusion survives tone and brand changes, undo and preset export', async 
   await diffusion.focus();
   await page.keyboard.press('End');
   await expect(diffusion).toHaveAttribute('aria-valuenow', '1');
-  await page.getByRole('button', { name: 'Синий отлив', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Синий отлив', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.getByRole('button', { name: 'Ч/б', exact: true }).click();
   await expect(diffusion).toHaveAttribute('aria-valuenow', '1');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Сохранить JSON', exact: true }).click();
   const file = JSON.parse(await readFile((await (await downloadPromise).path())!, 'utf8'));
   expect(file.look.diffusion).toBe(1);
-  expect(file.look.tone).toBe('blue');
+  expect(file.look.tone).toBe('mono');
   await page.getByRole('button', { name: 'Сбросить', exact: true }).click();
   await expect(diffusion).toHaveAttribute('aria-valuenow', '0');
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
@@ -214,6 +218,8 @@ test('calibrated VK light follows the Figma banner outside its lettering', async
       width: 1820,
       height: 647,
       grain: 0,
+      // The reference is the black-and-white banner.
+      tone: 'mono',
       // The banner enters at 32% of the top edge; default side presets stay at 22.5%.
       angle: (-Math.atan(0.36 / 0.55) * 180) / Math.PI,
       // Calibration of the guide profile: the setup before the art director's default.

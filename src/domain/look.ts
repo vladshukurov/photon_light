@@ -12,7 +12,7 @@ import { isBrand, type BrandId } from './brands';
 */
 
 export type Room = 'dark' | 'light';
-/** Версия основного VK: ч/б или с лёгким синим отливом. Сабрендов не касается. */
+/** Версия основного VK: с лёгким синим отливом (по умолчанию) или ч/б. Сабрендов не касается. */
 export type Tone = 'mono' | 'blue';
 
 export interface Motion {
@@ -91,14 +91,14 @@ export const RANGES = {
 export type NumericKey = keyof typeof RANGES;
 
 /*
-  Дефолт — свет направлений гайда (Figma 16719:174652): источник сверху
-  слева за краем, мягкий заход света без пятна, свечение и рассеивание
-  выключены.
+  Дефолт — свет направлений гайда (Figma 16719:174652): VK с синим отливом,
+  источник сверху слева за краем, мягкий заход света без пятна, свечение и
+  рассеивание выключены.
 */
 export const DEFAULT_LOOK: Look = {
   name: 'Новый свет',
   brand: 'vk',
-  tone: 'mono',
+  tone: 'blue',
   room: 'dark',
   angle: -45,
   distance: 1,

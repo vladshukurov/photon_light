@@ -67,17 +67,22 @@ export const initialHistory = (present: Look): History => ({
 /*
   Версия ключа поднимается, когда меняется дефолтный свет и все должны начать
   с него: прежнее автосохранение больше не читается и удаляется. v4 — свет
-  направлений гайда (ноябрь 2026).
+  направлений гайда (ноябрь 2026). v5 — VK по умолчанию с синим отливом:
+  свет из v4 переносится, но версия VK встаёт на новый дефолт — ч/б там было
+  просто прежним дефолтом.
 */
-export const STORAGE_KEY = 'photon:look:v4';
-const LEGACY_KEYS = ['photon:look:v3'];
+export const STORAGE_KEY = 'photon:look:v5';
+const PREVIOUS_KEY = 'photon:look:v4';
+const LEGACY_KEYS = ['photon:look:v3', PREVIOUS_KEY];
 
 export function restoreLook(
   storage:
     | (Pick<Storage, 'getItem'> & Partial<Pick<Storage, 'removeItem'>>)
     | undefined = globalThis.localStorage,
 ): Look {
+  let previous: string | null | undefined;
   try {
+    previous = storage?.getItem(PREVIOUS_KEY);
     for (const key of LEGACY_KEYS) storage?.removeItem?.(key);
   } catch {
     // Хранилище может быть недоступно — это не повод не открыть сцену.
@@ -85,6 +90,7 @@ export function restoreLook(
   try {
     const text = storage?.getItem(STORAGE_KEY);
     if (text) return normalizeLook(JSON.parse(text));
+    if (previous) return { ...normalizeLook(JSON.parse(previous)), tone: DEFAULT_LOOK.tone };
   } catch {
     // Повреждённые данные не должны мешать открыть чистую сцену.
   }

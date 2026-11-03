@@ -161,8 +161,8 @@ export function Inspector({
               label="Версия VK"
               value={look.tone}
               options={[
-                { id: 'mono', label: 'Ч/б' },
                 { id: 'blue', label: 'Синий отлив' },
+                { id: 'mono', label: 'Ч/б' },
               ]}
               onChange={(tone) => onChange({ tone })}
             />

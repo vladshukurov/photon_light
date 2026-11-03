@@ -53,7 +53,7 @@ describe('Look boundary', () => {
     });
     expect(l.brand).toBe('vk');
     expect(l.room).toBe('dark');
-    expect(l.tone).toBe('mono');
+    expect(l.tone).toBe('blue');
     expect(l.brightness).toBe(1);
     expect(l.diffusion).toBe(1);
     expect(l.haze).toBe(DEFAULT_LOOK.haze);
@@ -213,7 +213,11 @@ describe('one light rig', () => {
     expect(half.glow.gain).toBeGreaterThan(0);
     expect(full.glow.gain).toBeCloseTo(half.glow.gain * 2);
     expect(full.light).toEqual(off.light);
-    expect(full.glow.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
+    // Свечение белее луча: в синем отливе почти белое, в ч/б — белое.
+    const spread = (c: number[]) => Math.max(...c) - Math.min(...c);
+    expect(spread(full.glow.color)).toBeLessThan(spread(full.light.color));
+    const mono = buildScene(look({ glow: 1, tone: 'mono' }), 16 / 9);
+    expect(mono.glow.color.every((c) => Math.abs(c - 1) < 1e-6)).toBe(true);
     // Свечение прижато к краю со стороны источника, а не висит в кадре.
     const [hw, hh] = frameHalf(16 / 9);
     const [x, y] = half.glow.pos;
@@ -224,7 +228,7 @@ describe('one light rig', () => {
   it('starts from the light of the six guide directions', () => {
     expect(DEFAULT_LOOK).toMatchObject({
       brand: 'vk',
-      tone: 'mono',
+      tone: 'blue',
       angle: -45,
       distance: 1,
       expression: 0,
@@ -358,6 +362,17 @@ describe('history and storage', () => {
     expect(STORAGE_KEY).not.toBe('photon:look:v3');
     expect(restoreLook(storage)).toEqual(DEFAULT_LOOK);
     expect(store.has('photon:look:v3')).toBe(false);
+  });
+
+  it('keeps the light saved before the blue default but moves VK to the blue tone', () => {
+    const saved = look({ tone: 'mono', brightness: 0.36, rays: 0.4 });
+    const store = new Map([['photon:look:v4', JSON.stringify(saved)]]);
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      removeItem: (k: string) => void store.delete(k),
+    };
+    expect(restoreLook(storage)).toEqual({ ...saved, tone: 'blue' });
+    expect(store.has('photon:look:v4')).toBe(false);
   });
 });
 
