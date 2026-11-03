@@ -108,7 +108,7 @@ const RIG = {
   /** Сколько цвета в лампе синей версии VK: луч остаётся почти белым. */
   keyTint: 0.4,
   /** У сабрендов цвет бренда — в самом луче, как у синей версии VK, только плотнее. */
-  brandTint: 1,
+  brandTint: 0.65,
   /** Базовая яркость VK — общая для ч/б, синей версии и сабрендов. */
   vkEv: 1.2,
   /**
@@ -309,7 +309,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const colored = brand.id !== 'vk' || look.tone === 'blue';
   const ev = (dark ? RIG.ev : RIG.evLight) + profile.ev + look.brightness * 1.6;
   const vk = brand.id === 'vk';
-  const gain = Math.pow(2, ev + RIG.vkEv);
+  const gain = Math.pow(2, ev + RIG.vkEv + brand.ev);
   const b = RIG.bounce;
   // Отлив — широкий мягкий луч по той же оси с центром во входе луча, как
   // фоновое свечение синего баннера; дальше по оси он съехал бы вбок пятном.
@@ -320,7 +320,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const bounce: Lamp = {
     pos: bPos,
     dir: aim(bPos, b.reach),
-    color: tint(brand.accent, colored ? 1 : 0),
+    color: tint(brand.light, colored ? 1 : 0),
     coneHalf: b.cone * DEG,
     edge: 1,
     gain: gain * bounceGain,
@@ -334,7 +334,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     light: {
       pos,
       dir,
-      color: tint(brand.accent, vk ? (colored ? RIG.keyTint : 0) : RIG.brandTint),
+      color: tint(brand.light, vk ? (colored ? RIG.keyTint : 0) : RIG.brandTint),
       coneHalf: coneDeg * DEG,
       edge: RIG.edge.sharp ** (1 - 2 * look.softness),
       gain,
@@ -344,7 +344,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     bounce,
     glow: {
       pos: [ex + nx * RIG.glow.out, ey + ny * RIG.glow.out],
-      color: tint(brand.accent, colored ? RIG.glow.keyTint : 0),
+      color: tint(brand.light, colored ? RIG.glow.keyTint : 0),
       gain: gain * RIG.glow.gain * look.glow,
       radius: RIG.glow.radius,
     },
