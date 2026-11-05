@@ -48,6 +48,8 @@ struct Lamp {
   float decay;     // затухание по пути: свет не доходит до дальнего края кадра
   float coneHalf;
   float edge;      // степень края конуса: 1 — гаусс, больше — резче, меньше — длинные хвосты
+  float fan;       // раскрытие с расстоянием: за fanFrom конус шире на fan за единицу пути
+  float fanFrom;
 };
 uniform Lamp uKey;
 uniform Lamp uBounce;
@@ -208,9 +210,12 @@ vec3 lampAt(Lamp lamp, vec3 X, float rays, out vec3 L, out float dist) {
   float theta = atan(length(d - D * tz), tz);
 
   // Обобщённый гаусс: мягкость — это степень, а не ширина. Яркость центра не меняется.
-  float w = max(lamp.coneHalf + atan(r / max(dist, 1e-3)), 1e-3);
+  // Дальше входа в кадр луч расходится шире — ложится треугольником.
+  float cone = lamp.coneHalf * (1.0 + lamp.fan * max(dist - lamp.fanFrom, 0.0));
+  float w = max(cone + atan(r / max(dist, 1e-3)), 1e-3);
   float n = lamp.edge;
-  float profile = exp(-0.693147 * pow(max(theta / w, 1e-4), 2.0 * n));
+  // Раскрываясь, луч не прибавляет света, а расходится: тот же свет на большую ширину.
+  float profile = exp(-0.693147 * pow(max(theta / w, 1e-4), 2.0 * n)) * lamp.coneHalf / max(cone, 1e-4);
 
   float mask = rays > 0.0 ? rayMask(X, rays) : 1.0;
   return lamp.color * (lamp.gain * atten * profile * mask);

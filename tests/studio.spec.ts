@@ -238,8 +238,9 @@ test('calibrated VK light follows the Figma banner outside its lettering', async
       (fx > 0.374 && fx < 0.626 && fy > 0.667 && fy < 0.802) ||
       (fx > 0.352 && fx < 0.725 && fy > 0.914),
   );
-  // Old placement near the corner scores about 11; the calibrated beam is below 3.
-  expect(rmse).toBeLessThan(4);
+  // Old placement near the corner scores about 11. The art director's edit of 05.11
+  // (source higher, beam fanning out downwards) moved the beam off this banner to about 4.9.
+  expect(rmse).toBeLessThan(6);
 });
 
 test('default VK light stays close to the art director banner', async ({ page }) => {
@@ -254,8 +255,9 @@ test('default VK light stays close to the art director banner', async ({ page })
     () => false,
     [288, 162],
   );
-  // A dense stripe along the wall or a frame filled with light goes well above 3.
-  expect(rmse).toBeLessThan(3);
+  // The art director's edit of 05.11 (source higher, beam fanning out downwards, a softer
+  // spot) moved the default off this banner on purpose: about 5.1, it was below 3.
+  expect(rmse).toBeLessThan(6);
 });
 
 test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ page }) => {
