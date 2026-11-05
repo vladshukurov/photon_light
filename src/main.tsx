@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
 import { TEXT_FONT_FAMILY, TEXT_FONT_WEIGHT } from './engine/text';
+import { markDesktop } from './desktop';
+
+markDesktop();
 
 // Шрифт надписи нужен шейдеру ещё до того, как он встретится в интерфейсе.
 void document.fonts?.load(`${TEXT_FONT_WEIGHT} 32px "${TEXT_FONT_FAMILY}"`);

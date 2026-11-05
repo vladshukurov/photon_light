@@ -1,0 +1,20 @@
+{
+  "name": "photon-desktop",
+  "productName": "Фотон",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Фотон для macOS и Windows: та же студия света в окне приложения",
+  "author": "Студия света VK",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "node pack.mjs"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "allowScripts": {
+    "electron@45.2.3": true
+  }
+}

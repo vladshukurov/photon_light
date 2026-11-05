@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Фотон — студия света VK</title>
+    <meta name="description" content="Фотон — студия света VK. Приложение для macOS и Windows." />
+    <meta name="theme-color" content="#050505" />
+    <link rel="icon" href="assets/favicon.png" />
+    <link
+      rel="preload"
+      href="assets/fonts/vk-condensed-600.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <a class="logo" href="./">
+        <img src="assets/icon.png" alt="" width="24" height="24" />
+        <span>Фотон</span>
+      </a>
+      <span class="bar-version">1.0.0</span>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-light" aria-hidden="true"></div>
+        <h1>Фотон</h1>
+        <p class="lead">Студия света VK</p>
+        <div class="downloads">
+          <a class="button primary" data-os="mac" href="downloads/Photon-1.0.0-mac.dmg" download>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46-1.07-1.57-2.74-1.78-3.33-1.8-1.42-.15-2.77.83-3.5.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.16 9.21.77 1.11 1.68 2.36 2.88 2.31 1.16-.05 1.59-.75 2.99-.75 1.4 0 1.79.75 3.01.72 1.24-.02 2.03-1.13 2.79-2.25.88-1.29 1.24-2.53 1.26-2.6-.03-.01-2.42-.93-2.44-3.7ZM14.07 5.85c.64-.77 1.07-1.85.95-2.92-.92.04-2.03.61-2.69 1.38-.59.68-1.11 1.78-.97 2.83 1.02.08 2.07-.52 2.71-1.29Z"
+              />
+            </svg>
+            Скачать для Mac
+          </a>
+          <a class="button" data-os="win" href="downloads/Photon-1.0.0-windows-setup.exe" download>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M3 5.1 10.4 4v7.2H3V5.1Zm8.4-1.2L21 2.5v8.7h-9.6V3.9ZM3 12.8h7.4V20L3 18.9v-6.1Zm8.4 0H21v8.7l-9.6-1.4v-7.3Z"
+              />
+            </svg>
+            Скачать для Windows
+          </a>
+        </div>
+        <p class="meta">
+          <span data-meta="mac">macOS 12+, Apple Silicon и&nbsp;Intel</span>
+          <span data-meta="win">Windows 10 и&nbsp;11</span>
+        </p>
+
+        <figure class="window">
+          <img
+            src="assets/app.webp"
+            alt="Окно Фотона: слева источник и бренды, в центре кадр со светом и надписью, справа настройки света"
+            width="2880"
+            height="1748"
+          />
+          <svg class="lights" viewBox="0 0 1440 874" aria-hidden="true">
+            <circle cx="34" cy="34" r="6" fill="#ff5f57" />
+            <circle cx="54" cy="34" r="6" fill="#febc2e" />
+            <circle cx="74" cy="34" r="6" fill="#28c840" />
+          </svg>
+        </figure>
+      </section>
+
+      <section class="shots" aria-label="Кадры, сделанные в Фотоне">
+        <figure>
+          <img
+            src="assets/shot-vk.webp"
+            alt="Кадр VK: свет сверху слева, надпись «Новый сезон»"
+            width="800"
+            height="1000"
+            loading="lazy"
+          />
+          <figcaption>VK</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="assets/shot-music.webp"
+            alt="Кадр Музыки: свет сверху, надпись «Звук лета»"
+            width="800"
+            height="1000"
+            loading="lazy"
+          />
+          <figcaption>Музыка</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="assets/shot-video.webp"
+            alt="Кадр Видео: свет сверху справа, надпись «Премьера»"
+            width="800"
+            height="1000"
+            loading="lazy"
+          />
+          <figcaption>Видео</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="assets/shot-donut.webp"
+            alt="Кадр Доната: свет слева, надпись «Спасибо»"
+            width="800"
+            height="1000"
+            loading="lazy"
+          />
+          <figcaption>Донат</figcaption>
+        </figure>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span>Фотон 1.0.0 · Студия света VK</span>
+      <details>
+        <summary>Не открывается?</summary>
+        <p>
+          Mac: Системные настройки → Конфиденциальность и&nbsp;безопасность → Всё равно открыть.
+          Windows: Подробнее → Выполнить в&nbsp;любом случае.
+        </p>
+      </details>
+    </footer>
+
+    <script src="landing.js" defer></script>
+  </body>
+</html>

@@ -312,8 +312,11 @@ button:disabled {
 .preview-area {
   flex: 1;
   align-self: stretch;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
   min-height: 0;
 }
 .canvas-wrap {
@@ -355,6 +358,9 @@ button:disabled {
 }
 .source-handle.outside {
   background: rgba(255, 255, 255, 0.55);
+}
+.canvas-wrap .source-handle.hidden {
+  opacity: 0;
 }
 .canvas-wrap:hover .source-handle,
 .canvas-wrap.dragging .source-handle {
@@ -408,6 +414,87 @@ button:disabled {
 }
 .segmented[data-empty] .segmented-thumb {
   opacity: 0;
+}
+
+/* --- плеер живого света (в карточке) ---------------------------------- */
+
+.loop-player {
+  --progress: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px 0 4px;
+  border-radius: 999px;
+  background: var(--fill);
+}
+.play-button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  color: #07080a;
+  transition: transform 0.15s var(--ease);
+}
+.play-button:hover {
+  transform: scale(1.05);
+}
+.play-button:active {
+  transform: scale(0.92);
+}
+.transport-clock {
+  flex: none;
+  min-width: 84px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-feature-settings: 'tnum';
+  text-align: right;
+}
+.timeline {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  height: 28px;
+  margin-left: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: none;
+}
+.timeline:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.75);
+  outline-offset: 2px;
+}
+.timeline::before,
+.timeline i {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+}
+.timeline::before {
+  right: 0;
+  background: rgba(255, 255, 255, 0.12);
+}
+.timeline i {
+  width: calc(var(--progress) * 100%);
+  background: #fff;
+}
+.timeline i::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: -5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.6);
 }
 
 /* --- инспектор --------------------------------------------------------- */
@@ -511,19 +598,6 @@ button:disabled {
 .pad-source {
   fill: #fff;
   filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9));
-}
-.pad-path {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.6);
-  stroke-width: 1.2;
-  stroke-dasharray: 2 4;
-  stroke-linecap: round;
-}
-.pad-target {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.85);
-  stroke-width: 1.2;
-  stroke-dasharray: 3 2.5;
 }
 
 .chip-row {
@@ -962,6 +1036,12 @@ button:disabled {
 .export-sizes button:last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }
+.export-sizes.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.export-sizes.three button:last-child:nth-child(odd) {
+  grid-column: auto;
+}
 .export-sizes strong {
   font-size: 13px;
   font-weight: 500;
@@ -1302,6 +1382,56 @@ kbd {
   color: var(--text-2);
 }
 
+/* --- видео в экспорте -------------------------------------------------- */
+
+.video-length {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--fill);
+  line-height: 40px;
+}
+.video-length strong {
+  font-size: 14px;
+  font-weight: 500;
+  font-feature-settings: 'tnum';
+}
+.video-length span {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--fill);
+}
+.toggle-row span {
+  display: grid;
+  gap: 2px;
+}
+.toggle-row strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.toggle-row small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.toggle-row .toggle {
+  flex: none;
+}
+
 /* --- адаптив ----------------------------------------------------------- */
 
 @media (max-width: 960px) {
@@ -1338,8 +1468,8 @@ kbd {
   .preview-area {
     flex: none;
     width: 100%;
-    aspect-ratio: var(--aspect);
-    max-height: 72dvh;
+    /* холст во всю ширину плюс плеер под ним */
+    height: min(calc((100vw - 24px) / var(--aspect) + 62px), calc(72dvh + 62px));
   }
   .panel {
     width: auto;
@@ -1376,6 +1506,49 @@ kbd {
     width: 100%;
   }
 }
+/* --- приложение для macOS (desktop/) ---------------------------------- */
+
+/*
+  Окно без заголовка. Кнопки окна стоят в плашке сцены — как в приложениях
+  Mac, где в панели окна имя документа, а имя программы — в меню. Верхняя
+  полоса и пустые места плашек тянут окно, двойной клик по ним
+  разворачивает его. Курсор — стрелка, а не «палец», подписи интерфейса не
+  выделяются. Доска остаётся непрозрачной: размытые обои подкрашивали бы свет.
+*/
+[data-desktop='darwin'] .topbar {
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 12px;
+  -webkit-app-region: drag;
+}
+[data-desktop='darwin'] .topbar :is(button, input) {
+  -webkit-app-region: no-drag;
+}
+[data-desktop='darwin'] .wordmark {
+  display: none;
+}
+[data-desktop='darwin']:not([data-fullscreen='true']) .brand {
+  padding-left: 84px;
+}
+/* Сохранено ли — точкой, подробности в подсказке: имени сцены нужно место. */
+[data-desktop='darwin'] .save-state {
+  font-size: 0;
+  gap: 0;
+  padding: 6px;
+}
+[data-desktop='darwin'] .app {
+  -webkit-user-select: none;
+  user-select: none;
+}
+[data-desktop='darwin'] :is(input, textarea) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+[data-desktop='darwin'] :is(button, .timeline) {
+  cursor: default;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

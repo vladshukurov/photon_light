@@ -1,8 +1,19 @@
 import type { Look } from './look';
 
 export const EXPORT_SETTINGS_KEY = 'photon:export:v1';
+
+export type VideoPreset = 'v720' | 'v1080' | 'v4k';
+export interface VideoSettings {
+  preset: VideoPreset;
+  fps: 24 | 30 | 60;
+  /** Длина ролика без движения света: живут только дымка и лучи. */
+  seconds: 5 | 10 | 15;
+  motionBlur: boolean;
+}
+const VIDEO_DEFAULTS: VideoSettings = { preset: 'v1080', fps: 30, seconds: 10, motionBlur: true };
+
 export interface ExportSettings {
-  kind: 'image' | 'layers';
+  kind: 'image' | 'layers' | 'video';
   format: 'png' | 'jpg';
   preset: string;
   width: number;
@@ -11,6 +22,21 @@ export interface ExportSettings {
   ratio: number;
   quality: number;
   sceneRatio: number;
+  video: VideoSettings;
+}
+
+/** Размеры ролика под пропорции сцены: по длинной стороне 1280, 1920 и 3840. */
+export function videoPresets(look: Pick<Look, 'width' | 'height'>) {
+  const ratio = look.width / look.height;
+  const fit = (long: number) =>
+    ratio >= 1
+      ? { width: long, height: Math.round(long / ratio / 2) * 2 }
+      : { width: Math.round((long * ratio) / 2) * 2, height: long };
+  return [
+    { id: 'v720' as const, label: '720p', ...fit(1280) },
+    { id: 'v1080' as const, label: '1080p', ...fit(1920) },
+    { id: 'v4k' as const, label: '4K', ...fit(3840) },
+  ];
 }
 
 export function exportPresets(look: Pick<Look, 'width' | 'height'>) {
@@ -29,6 +55,16 @@ export function exportPresets(look: Pick<Look, 'width' | 'height'>) {
   );
 }
 
+function restoreVideo(raw: unknown): VideoSettings {
+  const v = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    preset: v.preset === 'v720' || v.preset === 'v4k' ? v.preset : VIDEO_DEFAULTS.preset,
+    fps: v.fps === 24 || v.fps === 60 ? v.fps : VIDEO_DEFAULTS.fps,
+    seconds: v.seconds === 5 || v.seconds === 15 ? v.seconds : VIDEO_DEFAULTS.seconds,
+    motionBlur: typeof v.motionBlur === 'boolean' ? v.motionBlur : VIDEO_DEFAULTS.motionBlur,
+  };
+}
+
 export function restoreExportSettings(look: Pick<Look, 'width' | 'height'>): ExportSettings {
   const defaults: ExportSettings = {
     kind: 'image',
@@ -40,6 +76,7 @@ export function restoreExportSettings(look: Pick<Look, 'width' | 'height'>): Exp
     ratio: look.width / look.height,
     quality: 0.95,
     sceneRatio: look.width / look.height,
+    video: { ...VIDEO_DEFAULTS },
   };
   try {
     const raw = JSON.parse(localStorage.getItem(EXPORT_SETTINGS_KEY) ?? 'null');
@@ -48,7 +85,10 @@ export function restoreExportSettings(look: Pick<Look, 'width' | 'height'>): Exp
       typeof v === 'number' && Number.isInteger(v) && v >= 64 && v <= 4096 ? v : fallback;
     const next = {
       ...defaults,
-      kind: raw.kind === 'layers' ? ('layers' as const) : ('image' as const),
+      kind:
+        raw.kind === 'layers' || raw.kind === 'video'
+          ? (raw.kind as 'layers' | 'video')
+          : ('image' as const),
       format: raw.format === 'jpg' ? ('jpg' as const) : ('png' as const),
       preset: ['x1', 'x2', '4k', 'custom'].includes(raw.preset) ? raw.preset : 'x1',
       width: size(raw.width, look.width),
@@ -58,6 +98,7 @@ export function restoreExportSettings(look: Pick<Look, 'width' | 'height'>): Exp
         typeof raw.quality === 'number' && Number.isFinite(raw.quality)
           ? Math.min(1, Math.max(0.4, raw.quality))
           : 0.95,
+      video: restoreVideo(raw.video),
     };
     next.ratio = next.width / next.height;
     if (next.locked && raw.sceneRatio !== defaults.sceneRatio) {

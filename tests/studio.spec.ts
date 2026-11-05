@@ -391,6 +391,52 @@ test('keeps export proportions and preferences and previews the actual JPEG', as
   await expect(dialog.getByRole('button', { name: 'Скачать JPG', exact: true })).toBeDisabled();
 });
 
+test('brings the light to life without moving it: card, player and preset', async ({ page }) => {
+  await ready(page);
+  const alive = page.getByRole('switch', { name: 'Живой свет' });
+  await alive.click();
+  await expect(alive).toHaveAttribute('aria-checked', 'true');
+  // Живой свет сразу играет; плеер — в карточке, под холстом его нет.
+  const card = page.getByRole('region', { name: 'Живой свет' });
+  await expect(card.getByRole('button', { name: 'Пауза', exact: true })).toBeVisible();
+  await expect(page.locator('.stage .transport')).toHaveCount(0);
+  const clock = card.locator('.transport-clock');
+  await expect(clock).toContainText('/ 10,0 с');
+  const before = await clock.textContent();
+  await expect.poll(() => clock.textContent()).not.toBe(before);
+  await page.locator('.workspace').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Space');
+  await expect(card.getByRole('button', { name: 'Воспроизвести', exact: true })).toBeVisible();
+  // Переезда больше нет: ни точки «Куда», ни хода света.
+  await expect(page.getByRole('button', { name: /Куда/ })).toHaveCount(0);
+  // Живой свет — тот же кадр во времени: только скорость и длина петли.
+  await expect(card.getByRole('slider')).toHaveCount(3);
+  await card.getByRole('slider', { name: 'Скорость' }).press('End');
+  await card.getByRole('slider', { name: 'Время в петле' }).press('End');
+  await expect(clock).toContainText('10,0 с / 10,0 с');
+
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Сохранить JSON', exact: true }).click();
+  const file = JSON.parse(await readFile((await (await downloading).path())!, 'utf8'));
+  expect(file.look.motion).toEqual({ enabled: true, duration: 10, speed: 3 });
+});
+
+test('records a video frame by frame and stops on request', async ({ page }) => {
+  await ready(page);
+  await page.getByRole('switch', { name: 'Живой свет' }).click();
+  await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Видео' }).click();
+  await expect(dialog.locator('.video-length')).toContainText('10 с');
+  await dialog.getByRole('button', { name: /720p/ }).click();
+  await dialog.getByRole('button', { name: '24', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Записать ролик' }).click();
+  await expect(dialog.getByRole('status')).toContainText('из 240', { timeout: 60_000 });
+  await dialog.getByRole('button', { name: 'Остановить' }).click();
+  await expect(dialog.getByRole('button', { name: 'Записать ролик' })).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+});
+
 test('fits mobile without horizontal overflow and switches format', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);

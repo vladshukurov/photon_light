@@ -15,12 +15,17 @@ export type Room = 'dark' | 'light';
 /** Версия основного VK: с лёгким синим отливом (по умолчанию) или ч/б. Сабрендов не касается. */
 export type Tone = 'mono' | 'blue';
 
+/*
+  Движение — живой свет. Это тот же кадр, что в статике, только проигранный
+  во времени: дымка течёт, лучи переливаются. Прибор, луч и все настройки
+  света стоят — движение ничего не добавляет к кадру и не меняет его.
+*/
 export interface Motion {
   enabled: boolean;
-  /** Куда свет приходит к концу прохода. */
-  toAngle: number;
-  /** Секунды на один проход. */
+  /** Длина ролика-петли, секунды. */
   duration: number;
+  /** Скорость жизни света: 1 — как задумано, меньше — спокойнее. */
+  speed: number;
 }
 
 export interface Look {
@@ -116,7 +121,7 @@ export const DEFAULT_LOOK: Look = {
   grain: 0.4,
   text: '',
   textSize: 0.14,
-  motion: { enabled: false, toAngle: 45, duration: 8 },
+  motion: { enabled: false, duration: 10, speed: 1 },
 };
 
 export const wrapAngle = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
@@ -126,19 +131,9 @@ export function directionOf(angle: number) {
   return DIRECTIONS.find((d) => Math.abs(wrapAngle(d.angle - angle)) < 0.5);
 }
 
-/** Угол в момент t ∈ [0, 1] прохода: кратчайшей дугой, с плавным разгоном и торможением. */
-export function angleAt(look: Look, t: number) {
-  if (!look.motion.enabled) return look.angle;
-  const k = clamp(t, 0, 1);
-  const eased = k * k * (3 - 2 * k);
-  return wrapAngle(look.angle + wrapAngle(look.motion.toAngle - look.angle) * eased);
-}
-
-/** Пинг-понг для живого превью: туда за duration, обратно за duration. */
-export function loopProgress(seconds: number, duration: number) {
-  const phase = (seconds / Math.max(duration, 0.1)) % 2;
-  return phase <= 1 ? phase : 2 - phase;
-}
+/** Момент внутри петли живого света. */
+export const loopTime = (motion: Motion, seconds: number) =>
+  ((seconds % motion.duration) + motion.duration) % motion.duration;
 
 export const validDimension = (v: unknown, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.round(clamp(v, 64, 4096)) : fallback;
@@ -167,10 +162,10 @@ export function normalizeLook(raw: unknown): Look {
   const m =
     src.motion && typeof src.motion === 'object' ? (src.motion as Record<string, unknown>) : {};
   if (typeof m.enabled === 'boolean') look.motion.enabled = m.enabled;
-  if (typeof m.toAngle === 'number' && Number.isFinite(m.toAngle))
-    look.motion.toAngle = wrapAngle(m.toAngle);
   if (typeof m.duration === 'number' && Number.isFinite(m.duration))
     look.motion.duration = clamp(Math.round(m.duration), 3, 20);
+  if (typeof m.speed === 'number' && Number.isFinite(m.speed))
+    look.motion.speed = clamp(m.speed, 0.25, 3);
   return look;
 }
 
@@ -237,6 +232,6 @@ function fromLegacy(p: Record<string, unknown>, name: unknown): Look {
     softness: num('coneSoftness', 0.6),
     rays: Math.min(1, num('goboAmount', 0) * 1.6),
     haze: Math.min(1, num('hazeDensity', 0.28) / 0.56),
-    motion: { enabled: false, toAngle: 45, duration: 8 },
+    motion: { ...DEFAULT_LOOK.motion },
   });
 }

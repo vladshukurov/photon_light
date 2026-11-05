@@ -10,8 +10,9 @@ import {
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Renderer } from '../engine/renderer';
 import { exportImage, exportLayers, type Layer } from '../engine/export';
-import { loopProgress, type Look } from '../domain/look';
+import { loopTime, type Look } from '../domain/look';
 import { buildScene, sourceFromFrame, sourceOnFrame } from '../domain/scene';
+import { setLoopClock } from '../domain/loopClock';
 
 export interface PreviewHandle {
   image: (format: 'png' | 'jpg', width: number, height: number, quality?: number) => Promise<Blob>;
@@ -19,12 +20,14 @@ export interface PreviewHandle {
     width: number,
     height: number,
   ) => Promise<{ layers: Layer[]; clipped: boolean; composite: Blob }>;
-  /** Доля прохода, которую сейчас показывает превью: её же получит экспорт кадра. */
-  progress: () => number;
+  /** Перейти к моменту петли живого света и встать на паузу. */
+  seek: (time: number) => void;
 }
 
 interface Props {
   look: Look;
+  /** Время идёт: дымка и лучи текут, в живом свете — в полную силу. */
+  playing: boolean;
   onSourceChange: (angle: number, distance: number, group: string) => void;
   onReady: (ready: boolean) => void;
 }
@@ -34,14 +37,14 @@ const MAX_W = 1600,
   SETTLE_FRAMES = 8;
 
 export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
-  { look, onSourceChange, onReady },
+  { look, playing, onSourceChange, onReady },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null),
     areaRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
-  // Время сцены. Пока моушена нет, кадр статичен: время стоит на нуле.
-  const live = useRef({ look, time: 0 });
+  // Время сцены. На паузе кадр статичен и после сходимости не тратит кадры.
+  const live = useRef({ look, playing, time: 0 });
   const invalidateRef = useRef<() => void>(() => {});
   const readyRef = useRef(onReady);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -58,8 +61,9 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
 
   useEffect(() => {
     live.current.look = look;
+    live.current.playing = playing;
     invalidateRef.current();
-  }, [look]);
+  }, [look, playing]);
 
   useEffect(() => {
     const area = areaRef.current;
@@ -90,6 +94,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
     let renderer: Renderer | null = null,
       raf = 0,
       frames = 0,
+      last = 0,
       disposed = false,
       lost = false;
 
@@ -100,23 +105,29 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
       readyRef.current(false);
     };
 
-    const draw = () => {
+    const draw = (now: number) => {
       raf = 0;
       if (disposed || lost || document.hidden || !renderer || canvas.width < 2) return;
-      const { look: l, time: t } = live.current;
+      const { look: l, playing: p } = live.current;
+      // Шаг времени — по реальным часам, но не больше 0.25 с: на медленной
+      // видеокарте ход не превращается в слоу-мо, а после паузы вкладки свет
+      // не перескакивает.
+      if (p) live.current.time += Math.min((now - (last || now)) / 1000, 0.25);
+      last = p ? now : 0;
+      const t = live.current.time;
       try {
-        const scene = buildScene(l, canvas.width / canvas.height, {
-          progress: loopProgress(t, l.motion.duration),
-          time: t,
-        });
+        const scene = buildScene(l, canvas.width / canvas.height, { time: t });
+        // На ходу кадр копится скользящим средним: шум марша уходит, а
+        // движение получает лёгкий шлейф, как выдержка камеры.
         renderer.render(scene, canvas.width, canvas.height, {
-          hazeSteps: 72,
+          hazeSteps: p ? 48 : 72,
           frame: frames,
-          alpha: 1 / (frames + 1),
+          alpha: p ? Math.max(0.35, 1 / (frames + 1)) : 1 / (frames + 1),
         });
         frames++;
         if (frames === 1) setLoading(false);
-        if (frames < SETTLE_FRAMES) raf = requestAnimationFrame(draw);
+        setLoopClock(l.motion.enabled ? loopTime(l.motion, t) : 0);
+        if (p || frames < SETTLE_FRAMES) raf = requestAnimationFrame(draw);
       } catch (e) {
         fail(e);
       }
@@ -124,6 +135,7 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
 
     const invalidate = () => {
       frames = 0;
+      last = 0;
       if (!raf && !disposed && !lost) raf = requestAnimationFrame(draw);
     };
     invalidateRef.current = invalidate;
@@ -183,10 +195,9 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
     };
     const sceneFor = (w: number, h: number) => {
       const { look: l, time } = live.current;
-      return buildScene(l, w / h, { progress: loopProgress(time, l.motion.duration), time });
+      return buildScene(l, w / h, { time });
     };
     return {
-      progress: () => loopProgress(live.current.time, live.current.look.motion.duration),
       async image(format, width, height, quality) {
         try {
           return await exportImage(
@@ -200,6 +211,10 @@ export const Preview = forwardRef<PreviewHandle, Props>(function Preview(
         } finally {
           invalidateRef.current();
         }
+      },
+      seek(time) {
+        live.current.time = time;
+        invalidateRef.current();
       },
       async layers(width, height) {
         try {

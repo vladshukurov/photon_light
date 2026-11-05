@@ -5,8 +5,7 @@ import { LiveThumb } from './LiveThumb';
 
 /*
   Миниатюра кадра с источником вокруг него. Шесть точек — направления гайда,
-  круглая ручка — сам свет, её можно тянуть в любое место. Пунктир — путь
-  прохода, если включено движение.
+  круглая ручка — сам свет, её можно тянуть в любое место.
 */
 
 const BOX = 220;
@@ -64,8 +63,6 @@ export function DirectionPad({
   };
 
   const [sx, sy] = toXY(look.angle, look.distance);
-  const target = look.motion.enabled ? toXY(look.motion.toAngle, look.distance) : null;
-  const path = target ? arcPath(look, toXY) : '';
   const current = directionOf(look.angle);
 
   return (
@@ -112,7 +109,6 @@ export function DirectionPad({
         }}
       >
         <rect className="pad-frame" x={cx - fw / 2} y={cy - fh / 2} width={fw} height={fh} rx="4" />
-        {path && <path className="pad-path" d={path} />}
         {DIRECTIONS.map((d) => {
           const [x, y] = toXY(d.angle, 1);
           return (
@@ -125,21 +121,9 @@ export function DirectionPad({
             />
           );
         })}
-        {target && <circle className="pad-target" cx={target[0]} cy={target[1]} r={6} />}
         <circle className="pad-halo" cx={sx} cy={sy} r={13} />
         <circle className="pad-source" cx={sx} cy={sy} r={6} />
       </svg>
     </div>
   );
-}
-
-function arcPath(look: Look, toXY: (angle: number, distance: number) => readonly [number, number]) {
-  const delta = ((look.motion.toAngle - look.angle + 540) % 360) - 180;
-  const steps = Math.max(2, Math.ceil(Math.abs(delta) / 4));
-  let d = '';
-  for (let i = 0; i <= steps; i++) {
-    const [x, y] = toXY(look.angle + (delta * i) / steps, look.distance);
-    d += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
-  }
-  return d;
 }

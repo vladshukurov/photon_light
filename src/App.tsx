@@ -7,6 +7,7 @@ import { Modal } from './components/Modal';
 import { useLook } from './hooks/useLook';
 import { DIRECTIONS, parseLook, serializeLook, type Look } from './domain/look';
 import { download } from './engine/export';
+import { desktop } from './desktop';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = isMac ? '⌘' : 'Ctrl+';
@@ -19,10 +20,15 @@ export default function App() {
   const [dialog, setDialog] = useState<'export' | 'help' | null>(null);
   const [toast, setToast] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const dragDepth = useRef(0);
 
   const change = useCallback(
-    (patch: Partial<Look>, group?: string) => set({ ...look, ...patch }, group),
+    (patch: Partial<Look>, group?: string) => {
+      // Включили движение — сразу показываем его: свет пошёл.
+      if (patch.motion?.enabled && !look.motion.enabled) setPlaying(true);
+      set({ ...look, ...patch }, group);
+    },
     [look, set],
   );
 
@@ -54,12 +60,35 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // В приложении эти команды приходят из системного меню, а не с клавиатуры.
+  useEffect(() => {
+    if (!desktop) return;
+    return desktop.onCommand((command) => {
+      if (command === 'help') return setDialog('help');
+      if (dialog) return;
+      const typing = document.activeElement?.closest('input:not([type=range]),select,textarea');
+      if (command === 'undo' || command === 'redo') {
+        // В поле ввода ⌘Z правит текст, как в любом приложении.
+        if (typing) document.execCommand(command);
+        else if (command === 'undo') undo();
+        else redo();
+      } else if (command === 'save') save();
+      else if (command === 'open') fileInput.current?.click();
+      else if (command === 'export' && ready) setDialog('export');
+    });
+  }, [dialog, undo, redo, save, ready]);
+
+  useEffect(() => {
+    if (desktop) document.title = `${look.name} — Фотон`;
+  }, [look.name]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (dialog) return;
       const target = e.target as HTMLElement;
       const typing = target.closest('input:not([type=range]),select,textarea');
       const mod = e.metaKey || e.ctrlKey;
+      if (mod && desktop) return;
       if (mod && e.code === 'KeyZ' && !typing) {
         e.preventDefault();
         if (e.shiftKey) redo();
@@ -73,6 +102,14 @@ export default function App() {
       } else if (mod && e.code === 'KeyE') {
         e.preventDefault();
         if (ready) setDialog('export');
+      } else if (
+        !mod &&
+        !typing &&
+        e.code === 'Space' &&
+        !target.closest('button,[role=slider],[role=switch]')
+      ) {
+        e.preventDefault();
+        if (look.motion.enabled) setPlaying((p) => !p);
       } else if (!mod && !typing && /^Digit[1-6]$/.test(e.code)) {
         const d = DIRECTIONS[Number(e.code.slice(5)) - 1];
         change({ angle: d.angle, distance: 1 });
@@ -80,7 +117,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dialog, undo, redo, save, ready, change]);
+  }, [dialog, undo, redo, save, ready, change, look.motion.enabled]);
 
   return (
     <div
@@ -124,7 +161,9 @@ export default function App() {
           <span
             className={`save-state${saved ? '' : ' off'}`}
             title={
-              saved ? 'Сцена хранится в этом браузере' : 'Сохраните JSON, чтобы не потерять сцену'
+              saved
+                ? `Сцена хранится в ${desktop ? 'приложении' : 'этом браузере'}`
+                : 'Сохраните JSON, чтобы не потерять сцену'
             }
           >
             {saved ? 'Сохранено' : 'Не сохраняется'}
@@ -191,11 +230,18 @@ export default function App() {
           <Preview
             ref={preview}
             look={look}
+            playing={playing && look.motion.enabled}
             onSourceChange={(angle, distance, group) => change({ angle, distance }, group)}
             onReady={setReady}
           />
         </section>
-        <Inspector look={look} onChange={change} />
+        <Inspector
+          look={look}
+          onChange={change}
+          playing={playing}
+          onPlayingChange={setPlaying}
+          onSeek={(t) => preview.current?.seek(t)}
+        />
       </main>
 
       <input
@@ -237,6 +283,7 @@ export default function App() {
 
 const SHORTCUTS = [
   ['1 – 6', 'Направления гайда'],
+  ['Пробел', 'Живой свет: пуск и пауза'],
   [`${MOD}Z / ⇧${MOD}Z`, 'Отменить и повторить'],
   [`${MOD}S`, 'Сохранить JSON'],
   [`${MOD}O`, 'Открыть JSON'],
@@ -260,6 +307,10 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <li>
             <strong>Фотон всегда белый.</strong> Бренд проявляется через цвет стены и среды, а не
             через окраску света.
+          </li>
+          <li>
+            <strong>Живой свет.</strong> С лучами переливаются лучи, без лучей свет медленно играет
+            яркостью. Источник стоит. Видео пишется покадрово, петлёй без шва.
           </li>
           <li>
             <strong>Свет на главном.</strong> Ставьте смысловой центр макета со стороны потока.

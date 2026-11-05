@@ -13,3 +13,8 @@ test-results/
 # Vercel
 .vercel/
 .vercel
+
+# приложение для macOS: копия сборки и готовые .app
+desktop/web/
+desktop/out/
+landing/downloads

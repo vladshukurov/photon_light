@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  angleAt,
   DEFAULT_LOOK,
   DIRECTIONS,
-  loopProgress,
+  loopTime,
   normalizeLook,
   parseLook,
   RANGES,
   serializeLook,
   type Look,
 } from './look';
-import { buildScene, edgePoint, frameHalf, sourceFromFrame, sourceOnFrame } from './scene';
+import { buildScene, edgePoint, frameHalf, sourceFromFrame, sourceOnFrame, swell } from './scene';
 import { historyReducer, initialHistory, restoreLook, STORAGE_KEY } from './history';
 import { aces, luma, solveAmbient, trimInverse } from './tone';
 import { BRANDS, LIGHT_ROOM } from './brands';
@@ -33,7 +32,7 @@ describe('Look boundary', () => {
       height: 1350,
       rays: 0.6,
       rayCount: 11,
-      motion: { enabled: true, toAngle: -45, duration: 12 },
+      motion: { enabled: true, duration: 12, speed: 1.5 },
     });
     expect(parseLook(serializeLook(l))).toEqual({ look: l, adapted: false });
   });
@@ -283,26 +282,56 @@ describe('expression', () => {
   });
 });
 
-describe('light pass motion', () => {
-  const moving = look({ angle: -45, motion: { enabled: true, toAngle: 45, duration: 8 } });
+describe('living light', () => {
+  const alive = look({ motion: { ...DEFAULT_LOOK.motion, enabled: true, speed: 1.5 } });
 
-  it('eases from start to target along the shorter arc', () => {
-    expect(angleAt(moving, 0)).toBe(-45);
-    expect(angleAt(moving, 0.5)).toBeCloseTo(0);
-    expect(angleAt(moving, 1)).toBeCloseTo(45);
-    const wrap = look({ angle: 135, motion: { enabled: true, toAngle: -135, duration: 8 } });
-    expect(Math.abs(angleAt(wrap, 0.5))).toBeCloseTo(180);
+  it('with rays plays the same frame as the still: only time runs', () => {
+    const rays = (motion: typeof DEFAULT_LOOK.motion) => look({ rays: 0.6, motion });
+    const still = buildScene(rays(DEFAULT_LOOK.motion), 16 / 9);
+    for (const time of [0, 2.5, 7.3]) {
+      const s = buildScene(rays(alive.motion), 16 / 9, { time });
+      expect({ ...s, time: 0 }).toEqual({ ...still, time: 0 });
+    }
   });
 
-  it('stays put when motion is off', () => {
-    expect(angleAt(look({ angle: 30 }), 0.7)).toBe(30);
+  it('without rays plays only with brightness and haze, slowly and around the still', () => {
+    const still = buildScene(look(), 16 / 9);
+    const ratios = Array.from({ length: 1200 }, (_, i) => {
+      const s = buildScene(alive, 16 / 9, { time: i / 30 });
+      expect({ ...s, light: still.light, bounce: still.bounce, glow: still.glow }).toMatchObject({
+        ...still,
+        haze: { ...still.haze, density: s.haze.density },
+        time: s.time,
+      });
+      expect(s.bounce.gain / still.bounce.gain).toBeCloseTo(s.light.gain / still.light.gain, 9);
+      return s.light.gain / still.light.gain;
+    });
+    expect(Math.min(...ratios)).toBeGreaterThan(0.7);
+    expect(Math.max(...ratios)).toBeLessThan(1.3);
+    expect(Math.max(...ratios) - Math.min(...ratios)).toBeGreaterThan(0.2);
+    // Плавно: от кадра к кадру — доли процента, без мелькания.
+    expect(Math.max(...ratios.slice(1).map((r, i) => Math.abs(r - ratios[i])))).toBeLessThan(0.01);
+    expect(swell(3, 0)).toBe(swell(3, 0));
   });
 
-  it('ping-pongs in the live preview', () => {
-    expect(loopProgress(0, 8)).toBe(0);
-    expect(loopProgress(8, 8)).toBe(1);
-    expect(loopProgress(12, 8)).toBeCloseTo(0.5);
-    expect(loopProgress(16, 8)).toBeCloseTo(0);
+  it('runs the light at its speed', () => {
+    expect(buildScene(alive, 1, { time: 4 }).time).toBeCloseTo(6);
+    expect(buildScene(look(), 1, { time: 4 }).time).toBeCloseTo(4);
+  });
+
+  it('wraps time into the loop', () => {
+    const m = { ...DEFAULT_LOOK.motion, duration: 10 };
+    expect(loopTime(m, 23)).toBeCloseTo(3);
+    expect(loopTime(m, -2)).toBeCloseTo(8);
+  });
+
+  it('opens files saved with earlier motion as living light', () => {
+    const l = normalizeLook({
+      motion: { enabled: true, toAngle: 45, mode: 'once', duration: 8, rays: 0.6, smoke: 1 },
+    });
+    expect(l.motion).toEqual({ ...DEFAULT_LOOK.motion, enabled: true, duration: 8 });
+    expect(normalizeLook({ motion: { speed: 9 } }).motion.speed).toBe(3);
+    expect(normalizeLook({ motion: { speed: 0 } }).motion.speed).toBe(0.25);
   });
 });
 

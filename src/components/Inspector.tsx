@@ -22,7 +22,8 @@ import {
 } from '../domain/look';
 import { DirectionPad } from './DirectionPad';
 import { LiveThumb } from './LiveThumb';
-import { Card, Segmented, Slider } from './controls';
+import { LoopPlayer } from './LoopPlayer';
+import { Card, Segmented, Slider, Toggle } from './controls';
 import { percent, signed } from './format';
 
 /** Стрелка показывает, куда идёт свет: источник сверху слева светит вниз вправо. */
@@ -51,12 +52,24 @@ const TUNING = [
 
 type Patch = Partial<Look>;
 
+/** Подпись положения: направление гайда, если источник на нём, иначе угол. */
+const spot = (angle: number, distance: number) => {
+  const d = directionOf(angle);
+  return d && distance === 1 ? d.label : `${Math.round(wrapAngle(angle))}°`;
+};
+
 export function Inspector({
   look,
   onChange,
+  playing,
+  onPlayingChange,
+  onSeek,
 }: {
   look: Look;
   onChange: (patch: Patch, group?: string) => void;
+  playing: boolean;
+  onPlayingChange: (playing: boolean) => void;
+  onSeek: (time: number) => void;
 }) {
   const slider = (key: NumericKey, label: string, format = percent, disabled = false) => (
     <Slider
@@ -103,13 +116,7 @@ export function Inspector({
         </Card>
         <Card
           title="Источник"
-          action={
-            <span className="card-meta">
-              {current && look.distance === 1
-                ? current.label
-                : `${Math.round(wrapAngle(look.angle))}°`}
-            </span>
-          }
+          action={<span className="card-meta">{spot(look.angle, look.distance)}</span>}
         >
           <DirectionPad
             look={look}
@@ -134,6 +141,60 @@ export function Inspector({
               );
             })}
           </div>
+        </Card>
+
+        <Card
+          title="Живой свет"
+          action={
+            <Toggle
+              label="Живой свет"
+              checked={look.motion.enabled}
+              onChange={(enabled) => onChange({ motion: { ...look.motion, enabled } })}
+            />
+          }
+        >
+          {look.motion.enabled ? (
+            <>
+              <LoopPlayer
+                duration={look.motion.duration}
+                playing={playing}
+                onPlayingChange={onPlayingChange}
+                onSeek={onSeek}
+              />
+              <div className="slider-stack">
+                <Slider
+                  label="Скорость"
+                  value={look.motion.speed}
+                  min={0.25}
+                  max={3}
+                  step={0.05}
+                  def={DEFAULT_LOOK.motion.speed}
+                  format={(v) => `×${String(Math.round(v * 100) / 100).replace('.', ',')}`}
+                  onChange={(speed) => onChange({ motion: { ...look.motion, speed } }, 'speed')}
+                />
+                <Slider
+                  label="Длина петли"
+                  value={look.motion.duration}
+                  min={3}
+                  max={20}
+                  step={1}
+                  def={DEFAULT_LOOK.motion.duration}
+                  format={(v) => `${Math.round(v)} с`}
+                  onChange={(duration) =>
+                    onChange(
+                      { motion: { ...look.motion, duration: Math.round(duration) } },
+                      'duration',
+                    )
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            <p className="hint">
+              С лучами переливаются лучи, без лучей свет медленно играет яркостью. Источник и
+              настройки света не меняются. Ролик пишется в экспорте.
+            </p>
+          )}
         </Card>
 
         <Card title="Окружение">

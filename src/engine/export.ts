@@ -253,9 +253,8 @@ async function recordVideo(
   let stream: MediaStream | undefined;
   try {
     renderer.init();
-    // Свет проходит по кадру за всю длину ролика; дымка и лучи живут всё время.
-    const frameScene = (seconds_: number) =>
-      buildScene(look, width / height, { progress: seconds_ / seconds, time: seconds_ });
+    // Свет идёт так же, как в превью; дымка и лучи живут всё время.
+    const frameScene = (t: number) => buildScene(look, width / height, { time: t });
     renderer.render(frameScene(0), width, height, { hazeSteps: 48 });
     // Capture a 2D presentation surface: direct WebGL capture is inconsistent
     // across browser compositors, even when isTypeSupported advertises a codec.

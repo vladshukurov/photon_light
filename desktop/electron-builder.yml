@@ -1,0 +1,62 @@
+# Установщики Фотона: DMG для macOS (Apple Silicon и Intel в одном приложении)
+# и установщик для Windows. Собираются на Mac: npm run desktop:pack в корне.
+appId: ru.vk.photon
+productName: Фотон
+copyright: Студия света VK
+directories:
+  output: out
+files:
+  - main.cjs
+  - preload.cjs
+  - package.json
+  - web/**
+asar: true
+
+mac:
+  target:
+    - target: dmg
+      arch: universal
+  category: public.app-category.graphics-design
+  icon: icon/Photon.icns
+  darkModeSupport: true
+  minimumSystemVersion: '12.0'
+  # Подпись на этой машине (ad-hoc): без неё macOS на Apple Silicon не
+  # запустит программу. Для раздачи без предупреждений нужен Developer ID
+  # и нотаризация Apple.
+  identity: '-'
+  hardenedRuntime: false
+  notarize: false
+  artifactName: Photon-${version}-mac.${ext}
+  extendInfo:
+    CFBundleDevelopmentRegion: ru
+dmg:
+  title: Фотон
+  # LZFSE: меньше и быстрее открывается, чем zlib по умолчанию.
+  format: ULFO
+  window:
+    width: 540
+    height: 380
+  contents:
+    - { x: 140, y: 180 }
+    - { x: 400, y: 180, type: link, path: /Applications }
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+  icon: icon/Photon.ico
+  artifactName: Photon-${version}-windows-setup.${ext}
+nsis:
+  # Ставится в один клик для текущего пользователя, без прав администратора.
+  oneClick: true
+  perMachine: false
+  shortcutName: Фотон
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: true
+  installerLanguages: [ru_RU]
+  language: '1049'
+  unicode: true
+  installerIcon: icon/Photon.ico
+  uninstallerIcon: icon/Photon.ico
+  uninstallDisplayName: Фотон

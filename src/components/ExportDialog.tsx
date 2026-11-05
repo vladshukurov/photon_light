@@ -3,6 +3,7 @@ import {
   ArrowDownToLine,
   Check,
   Copy,
+  Film,
   Image,
   Layers,
   LoaderCircle,
@@ -12,6 +13,7 @@ import {
 import { Modal } from './Modal';
 import { Segmented } from './controls';
 import { LiveThumb } from './LiveThumb';
+import { VideoExport } from './VideoExport';
 import type { PreviewHandle } from './Preview';
 import type { Look } from '../domain/look';
 import {
@@ -52,6 +54,7 @@ export function ExportDialog({
   const [zoom, setZoom] = useState(false);
   const [file, setFile] = useState<FilePreview | null>(null);
   const [pack, setPack] = useState<LayerPack | null>(null);
+  const [videoBusy, setVideoBusy] = useState(false);
   const { kind, format, preset, locked, quality } = settings;
   const presets = exportPresets(look);
   const chosen = presets.find((p) => p.id === preset);
@@ -173,6 +176,34 @@ export function ExportDialog({
   const thumbH = ratio >= 1 ? Math.max(1, Math.round(360 / ratio)) : 360;
   const byteLabel = result ? fileSize(result.blob.size) : null;
 
+  const kindSwitch = (
+    <Segmented
+      label="Что экспортировать"
+      value={kind}
+      options={[
+        { id: 'image', label: 'Картинка', icon: <Image size={14} /> },
+        { id: 'layers', label: 'Слои', icon: <Layers size={14} /> },
+        { id: 'video', label: 'Видео', icon: <Film size={14} /> },
+      ]}
+      onChange={(kind) => update({ kind })}
+    />
+  );
+
+  if (kind === 'video')
+    return (
+      <Modal title="Экспорт" onClose={onClose} busy={videoBusy} wide>
+        <div className="export">
+          <VideoExport
+            look={look}
+            video={settings.video}
+            onChange={(patch) => update({ video: { ...settings.video, ...patch } })}
+            kindSwitch={kindSwitch}
+            onBusyChange={setVideoBusy}
+          />
+        </div>
+      </Modal>
+    );
+
   return (
     <Modal title="Экспорт" onClose={onClose} busy={busy} wide>
       <div className="export">
@@ -230,15 +261,7 @@ export function ExportDialog({
         <div className="export-side">
           <fieldset className="export-form" disabled={busy}>
             <legend className="sr-only">Параметры экспорта</legend>
-            <Segmented
-              label="Что экспортировать"
-              value={kind}
-              options={[
-                { id: 'image', label: 'Картинка', icon: <Image size={14} /> },
-                { id: 'layers', label: 'Слои', icon: <Layers size={14} /> },
-              ]}
-              onChange={(kind) => update({ kind })}
-            />
+            {kindSwitch}
             <div className="field">
               <span className="field-label">Размер</span>
               <div className="export-sizes" role="group" aria-label="Размер">

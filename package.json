@@ -16,11 +16,15 @@
     "test:e2e": "npm run build && playwright test",
     "check": "npm run lint && npm run build && npm test",
     "format": "prettier --write . --ignore-unknown",
-    "format:check": "prettier --check . --ignore-unknown"
+    "format:check": "prettier --check . --ignore-unknown",
+    "desktop": "npm run build && npm --prefix desktop run start",
+    "desktop:pack": "npm run build && npm --prefix desktop run pack",
+    "landing": "node landing/prepare.mjs"
   },
   "dependencies": {
     "fflate": "0.8.3",
     "lucide-react": "1.64.0",
+    "mp4-muxer": "5.2.2",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

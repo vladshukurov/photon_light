@@ -1,5 +1,5 @@
 import { brandById, DARK_WALL, LIGHT_ROOM } from './brands';
-import { angleAt, wrapAngle, type Look } from './look';
+import { wrapAngle, type Look } from './look';
 import { linear, luma, solveAmbient } from './tone';
 
 /*
@@ -278,10 +278,32 @@ export function sourceFromFrame(u: number, v: number, aspect: number) {
   return { angle: wrapAngle(angle), distance: Math.min(2, Math.max(0.2, distance)) };
 }
 
+/*
+  Живой свет без лучей. С лучами живут сами лучи — переливаются на своих
+  местах. Без лучей свету переливаться нечем, поэтому он медленно и неровно
+  играет яркостью, а дымка чуть густеет и редеет. Без ритма, весь свет сразу:
+  ни пятен поверх, ни мелькания. Чем заметнее лучи, тем тише эта игра.
+*/
+const CALM = { light: 0.3, haze: 0.35 };
+
+const hash = (n: number) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+const vnoise = (x: number) => {
+  const i = Math.floor(x);
+  const f = x - i;
+  return hash(i) + (hash(i + 1) - hash(i)) * f * f * (3 - 2 * f);
+};
+/** Медленная неровная волна около нуля, примерно −0.9…0.8: период — секунды, без ритма. */
+export const swell = (time: number, seed: number) =>
+  2 * (0.7 * vnoise(time * 0.15 + seed) + 0.3 * vnoise(time * 0.37 + seed + 11)) - 1;
+
 export interface SceneOptions {
-  /** Доля прохода света, 0…1. Без движения не используется. */
-  progress?: number;
-  /** Секунды для течения дымки и дрейфа лучей; 0 — кадр застыл. */
+  /**
+   * Секунды живого света: лучи переливаются, без лучей свет играет яркостью;
+   * 0 — кадр застыл. Скорость растягивает или сжимает это время.
+   */
   time?: number;
 }
 
@@ -289,9 +311,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const brand = brandById(look.brand);
   const dark = look.room === 'dark';
   const profile = profileAt(look.room, look.expression);
-  const angle = angleAt(look, opts.progress ?? 0);
-
-  const [ex, ey] = edgePoint(angle, aspect);
+  const [ex, ey] = edgePoint(look.angle, aspect);
   const [ax, ay] = outward(ex, ey, aspect, TILT);
   const [nx, ny] = [ax, ay];
   const out = outOf(look.distance);
@@ -315,7 +335,9 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   const colored = brand.id !== 'vk' || look.tone === 'blue';
   const ev = (dark ? RIG.ev : RIG.evLight) + profile.ev + look.brightness * 1.6;
   const vk = brand.id === 'vk';
-  const gain = Math.pow(2, ev + RIG.vkEv);
+  const time = (opts.time ?? 0) * look.motion.speed;
+  const calm = look.motion.enabled ? 1 - Math.min(1, look.rays / 0.3) : 0;
+  const gain = Math.pow(2, ev + RIG.vkEv) * (1 + calm * CALM.light * swell(time, 0));
   const b = RIG.bounce;
   // Отлив — широкий мягкий луч по той же оси с центром во входе луча, как
   // фоновое свечение синего баннера; дальше по оси он съехал бы вбок пятном.
@@ -358,7 +380,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     ambient,
     roughness: 0.75,
     haze: {
-      density: (0.03 + look.haze * 0.24) * profile.haze,
+      density: (0.03 + look.haze * 0.24) * profile.haze * (1 + calm * CALM.haze * swell(time, 37)),
       g: 0.5,
       depth: 2.4,
       noise: 0.18 + look.rays * 0.15,
@@ -366,7 +388,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     },
     rays: { amount: look.rays, count: look.rayCount },
     text: { content: look.text.trim(), size: look.textSize, glow: dark ? 1 : 0 },
-    time: opts.time ?? 0,
+    time,
     bloom: {
       intensity: profile.bloom,
       threshold: dark ? profile.threshold : Math.max(0.5, floorLuma * 2.2),
