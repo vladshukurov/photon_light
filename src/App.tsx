@@ -79,7 +79,7 @@ export default function App() {
   }, [dialog, undo, redo, save, ready]);
 
   useEffect(() => {
-    if (desktop) document.title = `${look.name} — Фотон`;
+    if (desktop) document.title = `${look.name} — Свет`;
   }, [look.name]);
 
   useEffect(() => {
@@ -146,7 +146,7 @@ export default function App() {
     >
       <header className="topbar">
         <div className="glass pill brand">
-          <span className="wordmark">Фотон</span>
+          <span className="wordmark">Свет</span>
           <input
             className="name-input"
             aria-label="Название сцены"
@@ -305,7 +305,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
             сторона остаётся тёмной.
           </li>
           <li>
-            <strong>Фотон всегда белый.</strong> Бренд проявляется через цвет стены и среды, а не
+            <strong>Свет всегда белый.</strong> Бренд проявляется через цвет стены и среды, а не
             через окраску света.
           </li>
           <li>

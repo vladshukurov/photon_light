@@ -139,7 +139,7 @@ export async function downloadLayersZip(layers: Layer[], name: string, composite
   for (const [i, l] of layers.entries())
     entries[`0${i + 1}-${l.id}.png`] = new Uint8Array(await l.blob.arrayBuffer());
   entries['README.txt'] = new TextEncoder().encode(
-    'Фотон — слои для Figma.\n\n00-composite.png — точный цельный кадр с зерном, для сравнения и готового макета.\n\n' +
+    'Свет — слои для Figma.\n\n00-composite.png — точный цельный кадр с зерном, для сравнения и готового макета.\n\n' +
       layers.map((l, i) => `0${i + 1}-${l.id}.png — ${l.name}, режим ${l.blend}`).join('\n') +
       '\n\nПорядок снизу вверх. Слои непрозрачные, на чёрном фоне; режимы наложения обязательны. В слоях нет зерна; сложение может отличаться от цельного кадра.\n',
   );

@@ -190,15 +190,15 @@ export function parseLook(text: string): ParsedLook {
   } catch {
     throw new Error('Это не JSON-файл.');
   }
-  if (!raw || typeof raw !== 'object') throw new Error('В файле нет пресета Фотона.');
+  if (!raw || typeof raw !== 'object') throw new Error('В файле нет пресета.');
   const file = raw as Record<string, unknown>;
   if (typeof file.version === 'number' && file.version > FILE_VERSION)
-    throw new Error('Пресет создан в более новой версии Фотона.');
+    throw new Error('Пресет создан в более новой версии студии.');
   if (file.look && typeof file.look === 'object')
     return { look: normalizeLook(file.look), adapted: false };
   if (file.params && typeof file.params === 'object')
     return { look: fromLegacy(file.params as Record<string, unknown>, file.name), adapted: true };
-  throw new Error('В файле нет пресета Фотона.');
+  throw new Error('В файле нет пресета.');
 }
 
 /*

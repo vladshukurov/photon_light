@@ -1,16 +1,17 @@
-# Иконка Фотона: плотный круг света в середине тёмной плитки, вокруг — рассеянный свет.
+# Иконка студии: плотный круг света в середине тёмной плитки, вокруг — рассеянный свет.
 # Свет считается в линейном HDR и проходит тон-кривую ACES, как в движке.
 #
 #   python3 desktop/icon/make.py
 #
-# Пересобирает иконки macOS (.icns, сквиркл на сетке 1024 с тенью), Windows (.ico)
-# и лендинга. Нужны numpy и Pillow; .icns собирает iconutil из macOS.
+# Пересобирает иконки macOS (.icns, сквиркл на сетке 1024 с тенью), Windows (.ico),
+# фавиконки студии и лендинга. Нужны numpy и Pillow; .icns собирает iconutil из macOS.
 import os, subprocess, tempfile
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LANDING = os.path.join(HERE, '..', '..', 'landing', 'assets')
+PUBLIC = os.path.join(HERE, '..', '..', 'public')
 
 N = 1648  # рендер вдвое больше плитки 824 — для чистого края круга
 WALL, WALL_EDGE = '#08090c', '#020203'  # стена: к углам темнее
@@ -112,6 +113,13 @@ win = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
 win.alpha_composite(tile(art, rounded(240, 44), 0.16), (8, 8))
 win.save(os.path.join(HERE, 'icon-win-256.png'))
 win.save(os.path.join(HERE, 'Photon.ico'), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+
+# Фавиконки: плитка во всё поле, без тени — во вкладке круг крупнее.
+fav = tile(art, rounded(256, 56), 0.12)
+fav.resize((32, 32), Image.LANCZOS).save(os.path.join(PUBLIC, 'favicon-32.png'))
+fav.resize((192, 192), Image.LANCZOS).save(os.path.join(PUBLIC, 'favicon-192.png'))
+# iOS скругляет сам: квадрат без прозрачности.
+art.resize((180, 180), Image.LANCZOS).save(os.path.join(PUBLIC, 'apple-touch-icon.png'))
 
 # Лендинг: значок в шапке и favicon
 mac.resize((256, 256), Image.LANCZOS).save(os.path.join(LANDING, 'icon.png'))
