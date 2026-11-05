@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LOOK,
   DIRECTIONS,
+  LETTERING,
   loopTime,
   normalizeLook,
   parseLook,
@@ -256,7 +257,8 @@ describe('text', () => {
     const l = normalizeLook({ text: '  VK CONF  ', textSize: 9 });
     expect(l.text).toBe('  VK CONF  ');
     expect(l.textSize).toBe(0.4);
-    expect(buildScene(l, 1).text.content).toBe('VK CONF');
+    // Пока надпись скрыта, текст живёт в пресете, но в кадр не попадает.
+    expect(buildScene(l, 1).text.content).toBe(LETTERING ? 'VK CONF' : '');
     expect(normalizeLook({ text: 42 }).text).toBe('');
   });
 

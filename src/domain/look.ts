@@ -56,6 +56,12 @@ export interface Look {
   motion: Motion;
 }
 
+/**
+ * Надпись в свете. Пока скрыта (05.11): поля нет, сцена надпись не рисует.
+ * Текст в пресетах и JSON сохраняется — вернуть можно, поставив true.
+ */
+export const LETTERING = false;
+
 export const DIRECTIONS = [
   { id: 'top-left', label: 'Сверху слева', angle: -45 },
   { id: 'top', label: 'Сверху', angle: 0 },

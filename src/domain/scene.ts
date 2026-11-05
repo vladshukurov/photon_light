@@ -1,5 +1,5 @@
 import { brandById, DARK_WALL, LIGHT_ROOM } from './brands';
-import { wrapAngle, type Look } from './look';
+import { LETTERING, wrapAngle, type Look } from './look';
 import { linear, luma, solveAmbient } from './tone';
 
 /*
@@ -405,7 +405,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
       noiseScale: 1.7,
     },
     rays: { amount: look.rays, count: look.rayCount },
-    text: { content: look.text.trim(), size: look.textSize, glow: dark ? 1 : 0 },
+    text: { content: LETTERING ? look.text.trim() : '', size: look.textSize, glow: dark ? 1 : 0 },
     time,
     bloom: {
       intensity: profile.bloom,
