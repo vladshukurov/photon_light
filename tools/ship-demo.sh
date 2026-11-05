@@ -9,8 +9,14 @@
 #   4. запускает выкладку pgcode: сборка, проверки, ветка pgcode-ship, ожидание сервера.
 # В конце — одна строка JSON: адрес, логин demo и пароль.
 #
+# Сменить пароль: tools/ship-demo.sh --password <новый>; дальше он держится сам.
 # Сервер снимает демку, если её не обновляли 90 дней: выкладывать хотя бы раз в три месяца.
 set -euo pipefail
+
+new_password=""
+if [ "${1:-}" = "--password" ]; then
+  new_password=${2:?после --password нужен пароль}
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 COPY=https://github.com/pragmatica-design/demo-vk-light.git
@@ -25,8 +31,8 @@ git clone -q "$COPY" "$TMP/demo"
 git clone -q --depth 1 "$PGCODE" "$TMP/pgcode"
 ln -s "$ROOT/node_modules" "$TMP/demo/node_modules"
 
-password=$(git -C "$TMP/demo" show origin/pgcode-ship:.pgcode-ship.json 2>/dev/null |
-  python3 -c 'import json, sys; print(json.load(sys.stdin).get("password", ""))' 2>/dev/null || true)
+password=${new_password:-$(git -C "$TMP/demo" show origin/pgcode-ship:.pgcode-ship.json 2>/dev/null |
+  python3 -c 'import json, sys; print(json.load(sys.stdin).get("password", ""))' 2>/dev/null || true)}
 
 python3 - "$TMP/demo/pgcode.json" "$password" <<'PY'
 import json, sys
