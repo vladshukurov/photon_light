@@ -955,6 +955,15 @@ button:disabled {
 
 .modal.wide {
   width: min(820px, calc(100vw - 32px));
+  /*
+    Окно экспорта стоит верхом на месте, а не по центру: вкладки и настройки
+    меняют его высоту, и по центру оно скакало бы вверх-вниз. Нижняя граница
+    тоже почти не ходит: высоты хватает на самую длинную вкладку.
+  */
+  margin-top: max(24px, 8dvh);
+  margin-bottom: auto;
+  min-height: min(560px, calc(100dvh - max(24px, 8dvh) - 24px));
+  max-height: calc(100dvh - max(24px, 8dvh) - 24px);
 }
 .export {
   display: grid;
@@ -965,7 +974,8 @@ button:disabled {
 }
 .export-preview {
   display: grid;
-  grid-template-rows: auto minmax(220px, 1fr) auto auto;
+  /* Превью одной высоты на всех вкладках — оно не тянется за правой колонкой. */
+  grid-template-rows: auto 340px auto auto;
   align-content: start;
   gap: 12px;
   margin: 0;
@@ -996,6 +1006,8 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Строка одной высоты с кнопкой «100%» и без неё — превью не сдвигается. */
+  min-height: 28px;
   color: var(--text-2);
   font-size: 12px;
 }
@@ -1494,6 +1506,9 @@ kbd {
   }
   .export {
     grid-template-columns: 1fr;
+  }
+  .export-preview {
+    grid-template-rows: auto auto auto auto;
   }
   .export-well {
     min-height: 0;

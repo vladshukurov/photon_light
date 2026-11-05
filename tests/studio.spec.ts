@@ -258,6 +258,69 @@ test('default VK light stays close to the art director banner', async ({ page })
   expect(rmse).toBeLessThan(6);
 });
 
+test('layers rebuild the frame in Figma: exactly in Plus lighter, closely as they are', async ({
+  page,
+}) => {
+  await ready(page);
+  // Без зерна цельный PNG — ровно тот кадр, из которого сделаны слои.
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'layers.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ version: 3, look: { grain: 0 } })),
+  });
+  await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Слои', exact: true }).click();
+  await customSize(dialog, 480, 270);
+  await dialog.getByRole('button', { name: 'Собрать слои', exact: true }).click();
+  await expect(dialog.getByRole('list', { name: 'Слои' }).getByRole('listitem')).toHaveCount(3, {
+    timeout: 30_000,
+  });
+  const downloading = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Скачать все одним ZIP' }).click();
+  const { unzipSync } = await import('fflate');
+  const files = unzipSync(new Uint8Array(await readFile((await (await downloading).path())!)));
+  const b64 = (name: string) => Buffer.from(files[name]).toString('base64');
+  // Canvas складывает так же, как Figma: «lighter» — это Plus lighter, «source-over» — Normal.
+  const { plus, normal } = await page.evaluate(async (png) => {
+    const load = async (data: string) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${data}`;
+      await img.decode();
+      return img;
+    };
+    const [frame, ...layers] = await Promise.all(png.map(load));
+    const pixels = (draw: (ctx: CanvasRenderingContext2D) => void) => {
+      const c = document.createElement('canvas');
+      c.width = frame.width;
+      c.height = frame.height;
+      const ctx = c.getContext('2d')!;
+      draw(ctx);
+      return ctx.getImageData(0, 0, c.width, c.height).data;
+    };
+    const target = pixels((ctx) => ctx.drawImage(frame, 0, 0));
+    const stack = (modes: GlobalCompositeOperation[]) => {
+      const px = pixels((ctx) =>
+        layers.forEach((img, i) => {
+          ctx.globalCompositeOperation = modes[i];
+          ctx.drawImage(img, 0, 0);
+        }),
+      );
+      let worst = 0;
+      for (let i = 0; i < px.length; i += 4)
+        for (let c = 0; c < 3; c++) worst = Math.max(worst, Math.abs(px[i + c] - target[i + c]));
+      return worst;
+    };
+    return {
+      plus: stack(['source-over', 'lighter', 'lighter']),
+      normal: stack(['source-over', 'source-over', 'source-over']),
+    };
+  }, ['00-composite.png', '01-background.png', '02-light.png', '03-volume.png'].map(b64));
+  expect(plus).toBeLessThanOrEqual(2);
+  // Положенные как есть, без режимов, слои не превращаются в одну тусклую дымку.
+  expect(normal).toBeLessThanOrEqual(5);
+});
+
 test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ page }) => {
   await ready(page);
   await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
@@ -352,7 +415,7 @@ test('keeps export proportions and preferences and previews the actual JPEG', as
   await expect(dialog.getByRole('spinbutton', { name: 'Высота' })).toHaveValue('360');
   await dialog.getByRole('button', { name: 'Слои', exact: true }).click();
   await expect(dialog.getByRole('spinbutton', { name: 'Ширина' })).toHaveValue('640');
-  await expect(dialog).toContainText('Слои непрозрачные');
+  await expect(dialog).toContainText('на прозрачном, в режиме Plus lighter');
   await dialog.getByRole('button', { name: 'Картинка', exact: true }).click();
   await dialog.getByRole('button', { name: 'JPG', exact: true }).click();
   const quality = dialog.getByRole('slider', { name: 'Качество JPG' });

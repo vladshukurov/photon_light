@@ -97,6 +97,13 @@ export interface Layer {
  * Слои — разности 8-битных кадров после тонмапа, поэтому их сумма в sRGB
  * повторяет цельный кадр с точностью до единицы. Где разность отрицательна
  * (bloom объёма гасит свет под ним), сложение неточно — об этом флаг clipped.
+ *
+ * Свет и объём — на прозрачном: альфа — самый яркий канал, цвет поделён на неё.
+ * Plus lighter складывает цвет, умноженный на альфу, — ровно ту же разность.
+ * А положенные в Normal, такие слои поверх тёмного фона ложатся почти так же
+ * (в светлой комнате фон серый, и без Plus lighter свет темнее):
+ * непрозрачные чёрные слои закрывали бы всё под собой, и кадр ломался, стоило
+ * в Figma забыть режим.
  */
 export async function exportLayers(
   renderer: Renderer,
@@ -120,11 +127,24 @@ export async function exportLayers(
     }
     return bytes;
   };
+  const glass = (px: Uint8Array) => {
+    for (let i = 0; i < px.length; i += 4) {
+      const m = Math.max(px[i], px[i + 1], px[i + 2]);
+      px[i + 3] = m;
+      if (m > 0) for (let c = 0; c < 3; c++) px[i + c] = Math.round((px[i + c] * 255) / m);
+    }
+    return px;
+  };
   const png = (px: Uint8Array) => canvasBlob(pixelsToCanvas(px, width, height));
   const layers: Layer[] = [
     { id: 'background', name: 'Фон', blend: 'Normal', blob: await png(base) },
-    { id: 'light', name: 'Свет', blend: 'Plus lighter', blob: await png(diff(stack, base)) },
-    { id: 'volume', name: 'Объём', blend: 'Plus lighter', blob: await png(diff(full, stack)) },
+    { id: 'light', name: 'Свет', blend: 'Plus lighter', blob: await png(glass(diff(stack, base))) },
+    {
+      id: 'volume',
+      name: 'Объём',
+      blend: 'Plus lighter',
+      blob: await png(glass(diff(full, stack))),
+    },
   ];
   const composite =
     scene.grain === 0 ? await png(full) : await exportImage(renderer, scene, width, height, 'png');
@@ -141,7 +161,7 @@ export async function downloadLayersZip(layers: Layer[], name: string, composite
   entries['README.txt'] = new TextEncoder().encode(
     'Свет — слои для Figma.\n\n00-composite.png — точный цельный кадр с зерном, для сравнения и готового макета.\n\n' +
       layers.map((l, i) => `0${i + 1}-${l.id}.png — ${l.name}, режим ${l.blend}`).join('\n') +
-      '\n\nПорядок снизу вверх. Слои непрозрачные, на чёрном фоне; режимы наложения обязательны. В слоях нет зерна; сложение может отличаться от цельного кадра.\n',
+      '\n\nПорядок снизу вверх: фон — самый нижний. Свет и объём — на прозрачном, в режиме Plus lighter; в тёмной комнате они ложатся и в Normal. Фон не ставьте в Plus lighter поверх белой заливки фрейма. В слоях нет зерна.\n',
   );
   const zip = zipSync(entries, { level: 0 });
   download(new Blob([new Uint8Array(zip)], { type: 'application/zip' }), `${name} — слои.zip`);
