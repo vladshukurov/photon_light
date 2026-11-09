@@ -157,8 +157,17 @@ const RIG = {
    * работает на всём ходе, без мёртвой зоны.
    */
   edge: { sharp: 2.5 },
-  /** Конус лампы в градусах: база и прибавка ползунка «Ширина луча». */
-  cone: { base: 4, spread: 12 },
+  /**
+   * Конус лампы в градусах: от base (0%) до base + spread (100%). Ход ползунка
+   * степенной: середина (50%, дефолт) — это прежние 30% по пресету
+   * арт-директора от 09.11, крайние положения те же.
+   */
+  cone: { base: 4, spread: 12, curve: Math.log(0.3) / Math.log(0.5) },
+  /**
+   * Яркость: ползунок ±1 — это ±1.6 EV. Ноль ползунка (дефолт) — прежние +10%
+   * по пресету арт-директора от 09.11.
+   */
+  brightness: { zero: 0.1 * 1.6, span: 1.6 },
 };
 
 /** Цвет света, нормированный по яркости: окраска не меняет экспозицию. */
@@ -336,7 +345,7 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
     normalize([ex - ax * reach - lamp[0], ey - ay * reach - lamp[1], -lamp[2]]);
   const dir = aim(pos, RIG.reach);
 
-  const coneDeg = RIG.cone.base + look.spread * RIG.cone.spread + profile.cone;
+  const coneDeg = RIG.cone.base + look.spread ** RIG.cone.curve * RIG.cone.spread + profile.cone;
 
   const saturation = profile.saturation;
   const wall = dark ? DARK_WALL : LIGHT_ROOM.wall;
@@ -347,7 +356,11 @@ export function buildScene(look: Look, aspect: number, opts: SceneOptions = {}):
   // Установка и яркость у всех брендов одни — дефолтная VK; бренд меняет
   // только цвет и силу отлива.
   const colored = brand.id !== 'vk' || look.tone === 'blue';
-  const ev = (dark ? RIG.ev : RIG.evLight) + profile.ev + look.brightness * 1.6;
+  const ev =
+    (dark ? RIG.ev : RIG.evLight) +
+    profile.ev +
+    RIG.brightness.zero +
+    look.brightness * RIG.brightness.span;
   const vk = brand.id === 'vk';
   const time = (opts.time ?? 0) * look.motion.speed;
   const calm = look.motion.enabled ? 1 - Math.min(1, look.rays / 0.3) : 0;

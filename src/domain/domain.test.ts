@@ -360,6 +360,46 @@ describe('tone', () => {
   });
 });
 
+describe('art director preset of 09.11', () => {
+  // Пресет арт-директора (version 3): яркость +10%, ширина луча 30%, три луча.
+  const preset = {
+    app: 'photon',
+    version: 3,
+    look: {
+      ...DEFAULT_LOOK,
+      brightness: 0.1,
+      spread: 0.3,
+      rayCount: 3,
+      motion: { enabled: false, duration: 10, speed: 1 },
+    },
+  };
+
+  it('opens a version 3 preset as the new default on round sliders', () => {
+    const { look: opened } = parseLook(JSON.stringify(preset));
+    expect(opened.brightness).toBeCloseTo(0, 12);
+    expect(opened.spread).toBeCloseTo(0.5, 12);
+    expect(opened.rayCount).toBe(3);
+    expect(buildScene(opened, 16 / 9)).toEqual(buildScene(DEFAULT_LOOK, 16 / 9));
+  });
+
+  it('keeps the light of any version 3 preset', () => {
+    const old = { ...preset, look: { ...preset.look, brightness: -0.4, spread: 0.8 } };
+    const { look: opened } = parseLook(JSON.stringify(old));
+    const reopened = parseLook(serializeLook(opened)).look;
+    expect(reopened).toEqual(opened);
+    expect(opened.brightness).toBeCloseTo(-0.5, 12);
+    // ширина луча: тот же конус, что давали прежние 80%
+    const cone = (s: number) => buildScene(look({ spread: s }), 1).light.coneHalf;
+    expect(cone(opened.spread)).toBeCloseTo(cone(0.5) + (0.8 - 0.3) * (cone(1) - cone(0)), 9);
+  });
+
+  it('keeps the extreme beam widths and puts the old 30% in the middle', () => {
+    const cone = (s: number) => (buildScene(look({ spread: s }), 1).light.coneHalf * 180) / Math.PI;
+    expect(cone(1) - cone(0)).toBeCloseTo(12, 9);
+    expect(cone(0.5) - cone(0)).toBeCloseTo(0.3 * 12, 9);
+  });
+});
+
 describe('history and storage', () => {
   it('merges rapid edits of one control and drops redo on a new edit', () => {
     let s = initialHistory(look());
@@ -384,25 +424,15 @@ describe('history and storage', () => {
   });
 
   it('starts everyone from the new default once the storage key is bumped', () => {
-    const store = new Map([['photon:look:v3', JSON.stringify(look({ brightness: 0.36 }))]]);
+    const old = ['photon:look:v3', 'photon:look:v4', 'photon:look:v5'];
+    const store = new Map(old.map((k) => [k, JSON.stringify(look({ brightness: 0.36 }))]));
     const storage = {
       getItem: (k: string) => store.get(k) ?? null,
       removeItem: (k: string) => void store.delete(k),
     };
-    expect(STORAGE_KEY).not.toBe('photon:look:v3');
+    expect(old).not.toContain(STORAGE_KEY);
     expect(restoreLook(storage)).toEqual(DEFAULT_LOOK);
-    expect(store.has('photon:look:v3')).toBe(false);
-  });
-
-  it('keeps the light saved before the blue default but moves VK to the blue tone', () => {
-    const saved = look({ tone: 'mono', brightness: 0.36, rays: 0.4 });
-    const store = new Map([['photon:look:v4', JSON.stringify(saved)]]);
-    const storage = {
-      getItem: (k: string) => store.get(k) ?? null,
-      removeItem: (k: string) => void store.delete(k),
-    };
-    expect(restoreLook(storage)).toEqual({ ...saved, tone: 'blue' });
-    expect(store.has('photon:look:v4')).toBe(false);
+    for (const k of old) expect(store.has(k)).toBe(false);
   });
 });
 

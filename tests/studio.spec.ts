@@ -79,7 +79,7 @@ test('edits light, brand and room with undo, redo and session restore', async ({
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const saved = localStorage.getItem('photon:look:v5');
+        const saved = localStorage.getItem('photon:look:v6');
         return saved ? JSON.parse(saved).rays : null;
       }),
     )
@@ -371,7 +371,7 @@ test('exports PNG, JPG, layers and JSON; imports and rejects presets', async ({ 
   await page.getByRole('button', { name: 'Сохранить JSON', exact: true }).click();
   const jsonText = await readFile((await (await downloadPromise).path())!, 'utf8');
   const file = JSON.parse(jsonText);
-  expect(file.version).toBe(3);
+  expect(file.version).toBe(4);
   expect(file.look.name).toBe('Первый свет');
 
   await page.locator('input[type=file]').setInputFiles({

@@ -94,7 +94,7 @@ export const RANGES = {
   softness: { min: 0, max: 1, def: 0.5 },
   glow: { min: 0, max: 1, def: 0 },
   rays: { min: 0, max: 1, def: 0 },
-  rayCount: { min: 3, max: 16, def: 7 },
+  rayCount: { min: 3, max: 16, def: 3 },
   haze: { min: 0, max: 1, def: 0.5 },
   grain: { min: 0, max: 1, def: 0.4 },
   textSize: { min: 0.05, max: 0.4, def: 0.14 },
@@ -102,9 +102,9 @@ export const RANGES = {
 export type NumericKey = keyof typeof RANGES;
 
 /*
-  Дефолт — свет направлений гайда (Figma 16719:174652): VK с синим отливом,
-  источник сверху слева за краем, мягкий заход света без пятна, свечение и
-  рассеивание выключены.
+  Дефолт — пресет арт-директора от 09.11: свет направлений гайда (Figma
+  16719:174652), VK с синим отливом, источник сверху слева за краем, луч чуть
+  ярче и уже прежнего, свечение и рассеивание выключены, три луча.
 */
 export const DEFAULT_LOOK: Look = {
   name: 'Новый свет',
@@ -122,7 +122,7 @@ export const DEFAULT_LOOK: Look = {
   softness: 0.5,
   glow: 0,
   rays: 0,
-  rayCount: 7,
+  rayCount: 3,
   haze: 0.5,
   grain: 0.4,
   text: '',
@@ -177,7 +177,22 @@ export function normalizeLook(raw: unknown): Look {
 
 // --- JSON-пресет ---------------------------------------------------------
 
-export const FILE_VERSION = 3;
+/*
+  Версия 4 (09.11): дефолт — пресет арт-директора. Ползунки остались на
+  круглых значениях, а шкалы под ними сдвинуты: яркость 0 — прежние +10%,
+  ширина луча 50% — прежние 30%. Файлы версии 3 переводятся в новые шкалы при
+  открытии, свет в них не меняется.
+*/
+export const FILE_VERSION = 4;
+
+/** Перевод пресета из шкал версии 3: тот же свет на новых ползунках. */
+function fromV3(look: Look): Look {
+  return {
+    ...look,
+    brightness: clamp(look.brightness - 0.1, RANGES.brightness.min, RANGES.brightness.max),
+    spread: look.spread ** (Math.log(0.5) / Math.log(0.3)),
+  };
+}
 
 export function serializeLook(look: Look): string {
   return JSON.stringify({ app: 'photon', version: FILE_VERSION, look }, null, 2);
@@ -200,10 +215,16 @@ export function parseLook(text: string): ParsedLook {
   const file = raw as Record<string, unknown>;
   if (typeof file.version === 'number' && file.version > FILE_VERSION)
     throw new Error('Пресет создан в более новой версии студии.');
-  if (file.look && typeof file.look === 'object')
-    return { look: normalizeLook(file.look), adapted: false };
+  const v3 = typeof file.version !== 'number' || file.version < 4;
+  if (file.look && typeof file.look === 'object') {
+    const look = normalizeLook(file.look);
+    return { look: v3 ? fromV3(look) : look, adapted: false };
+  }
   if (file.params && typeof file.params === 'object')
-    return { look: fromLegacy(file.params as Record<string, unknown>, file.name), adapted: true };
+    return {
+      look: fromV3(fromLegacy(file.params as Record<string, unknown>, file.name)),
+      adapted: true,
+    };
   throw new Error('В файле нет пресета.');
 }
 
