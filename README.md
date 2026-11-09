@@ -38,6 +38,8 @@ npx playwright install chromium
 npm run test:e2e         # реальный WebGL: редактор, экспорт, импорт, мобильная вёрстка
 ```
 
+WebGL в e2e считается на процессоре: на Mac — SwiftShader, весь набор идёт 2–3 минуты. CI на GitHub (`.github/workflows/ci.yml`) ставит Mesa lavapipe (`mesa-vulkan-drivers`): SwiftShader на раннере собран с медленным Subzero и не успевает за экспортом и видео. Какой WebGL достался браузеру, тесты пишут в лог первой строкой; на CI без lavapipe прогон останавливается сразу.
+
 ## Калибровка света
 
 `tools/sheet.html` рендерит набор Look в один контактный лист рядом с эталонами. `tools/shoot.mjs` снимает его в PNG с аппаратным GPU — так проверяются правки шейдера и профилей:
