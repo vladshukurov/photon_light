@@ -485,6 +485,10 @@ test('brings the light to life without moving it: card, player and preset', asyn
 });
 
 test('records a video frame by frame and stops on request', async ({ page }) => {
+  // До первого кадра ролика кодировщик прогревается полсекунды ролика: 12 кадров
+  // по 3 подкадра в 1280×720, пока живой свет играет в превью. На процессоре это
+  // 25–40 с и на Mac, и на раннере — ждём с запасом.
+  test.setTimeout(240_000);
   await ready(page);
   await page.getByRole('switch', { name: 'Живой свет' }).click();
   await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
@@ -494,7 +498,7 @@ test('records a video frame by frame and stops on request', async ({ page }) => 
   await dialog.getByRole('button', { name: /720p/ }).click();
   await dialog.getByRole('button', { name: '24', exact: true }).click();
   await dialog.getByRole('button', { name: 'Записать ролик' }).click();
-  await expect(dialog.getByRole('status')).toContainText('из 240', { timeout: 60_000 });
+  await expect(dialog.getByRole('status')).toContainText('из 240', { timeout: 150_000 });
   await dialog.getByRole('button', { name: 'Остановить' }).click();
   await expect(dialog.getByRole('button', { name: 'Записать ролик' })).toBeVisible();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
